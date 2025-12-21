@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.34928.147
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "minecraft", "minecraft\minecraft.csproj", "{00862D26-5C6C-49C2-83A6-BAB62E8F3EED}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{00862D26-5C6C-49C2-83A6-BAB62E8F3EED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00862D26-5C6C-49C2-83A6-BAB62E8F3EED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00862D26-5C6C-49C2-83A6-BAB62E8F3EED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00862D26-5C6C-49C2-83A6-BAB62E8F3EED}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D76708D8-148C-4B81-89D7-DE7507F03643}
+	EndGlobalSection
+EndGlobal
