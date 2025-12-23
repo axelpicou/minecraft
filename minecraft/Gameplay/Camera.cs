@@ -6,6 +6,7 @@ namespace minecraft.Gameplay
 {
     public class Camera
     {
+        // Position accessible en lecture, modifiable via SetPosition ou Move
         public Vector3 Position { get; private set; }
         public Vector3 Front { get; private set; } = -Vector3.UnitZ;
         public Vector3 Up { get; private set; } = Vector3.UnitY;
@@ -27,9 +28,7 @@ namespace minecraft.Gameplay
         }
 
         public Matrix4 GetViewMatrix()
-        {
-            return Matrix4.LookAt(Position, Position + Front, Up);
-        }
+            => Matrix4.LookAt(Position, Position + Front, Up);
 
         public void ProcessKeyboard(KeyboardState input, float deltaTime)
         {
@@ -58,7 +57,7 @@ namespace minecraft.Gameplay
             }
 
             float xOffset = mousePos.X - lastMousePos.X;
-            float yOffset = lastMousePos.Y - mousePos.Y; // inversé pour coordonnée écran
+            float yOffset = lastMousePos.Y - mousePos.Y;
 
             lastMousePos = mousePos;
 
@@ -68,7 +67,6 @@ namespace minecraft.Gameplay
             Yaw += xOffset;
             Pitch += yOffset;
 
-            // limite la rotation verticale
             Pitch = MathHelper.Clamp(Pitch, -89f, 89f);
 
             UpdateCameraVectors();
@@ -83,6 +81,22 @@ namespace minecraft.Gameplay
             Front = Vector3.Normalize(front);
             Right = Vector3.Normalize(Vector3.Cross(Front, Vector3.UnitY));
             Up = Vector3.Normalize(Vector3.Cross(Right, Front));
+        }
+
+        // ============================================
+        // Nouvelles méthodes pour gameplay
+        // ============================================
+
+        // Repositionne la caméra à une position donnée
+        public void SetPosition(Vector3 newPos)
+        {
+            Position = newPos;
+        }
+
+        // Déplace la caméra d'un offset donné
+        public void Move(Vector3 offset)
+        {
+            Position += offset;
         }
     }
 }

@@ -1,13 +1,12 @@
 ﻿using System;
-using System.IO;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
+using OpenTK.Windowing.GraphicsLibraryFramework;
 using minecraft.worldgen;
 using minecraft.Gameplay;
 using minecraft.Graphics;
-using SimplexNoise;
 
 namespace minecraft
 {
@@ -18,35 +17,38 @@ namespace minecraft
         private Block cubeBlock;
         private int shaderProgram;
 
+        private BlockInteractor interactor;
+        private CrosshairRenderer crosshair;
+
+        // Cube vertices et indices
         private readonly float[] vertices = new float[]
         {
             // positions          // texCoords
-            // Front
             -0.5f,-0.5f, 0.5f, 0f,0f,
              0.5f,-0.5f, 0.5f, 1f,0f,
              0.5f, 0.5f, 0.5f, 1f,1f,
             -0.5f, 0.5f, 0.5f, 0f,1f,
-            // Back
+
             -0.5f,-0.5f,-0.5f, 0f,0f,
              0.5f,-0.5f,-0.5f, 1f,0f,
              0.5f, 0.5f,-0.5f, 1f,1f,
             -0.5f, 0.5f,-0.5f, 0f,1f,
-            // Left
+
             -0.5f,-0.5f,-0.5f,0f,0f,
             -0.5f,-0.5f, 0.5f,1f,0f,
             -0.5f, 0.5f, 0.5f,1f,1f,
             -0.5f, 0.5f,-0.5f,0f,1f,
-            // Right
+
              0.5f,-0.5f,-0.5f,0f,0f,
              0.5f,-0.5f, 0.5f,1f,0f,
              0.5f, 0.5f, 0.5f,1f,1f,
              0.5f, 0.5f,-0.5f,0f,1f,
-            // Top
+
             -0.5f,0.5f,0.5f,0f,0f,
              0.5f,0.5f,0.5f,1f,0f,
              0.5f,0.5f,-0.5f,1f,1f,
             -0.5f,0.5f,-0.5f,0f,1f,
-            // Bottom
+
             -0.5f,-0.5f,0.5f,0f,0f,
              0.5f,-0.5f,0.5f,1f,0f,
              0.5f,-0.5f,-0.5f,1f,1f,
@@ -55,12 +57,12 @@ namespace minecraft
 
         private readonly uint[] indices = new uint[]
         {
-            0,1,2,2,3,0,      // Front
-            4,5,6,6,7,4,      // Back
-            8,9,10,10,11,8,   // Left
-            12,13,14,14,15,12,// Right
-            16,17,18,18,19,16,// Top
-            20,21,22,22,23,20 // Bottom
+            0,1,2,2,3,0,
+            4,5,6,6,7,4,
+            8,9,10,10,11,8,
+            12,13,14,14,15,12,
+            16,17,18,18,19,16,
+            20,21,22,22,23,20
         };
 
         public Game(int width, int height)
@@ -82,7 +84,7 @@ namespace minecraft
             GL.Enable(EnableCap.DepthTest);
 
             // Camera
-            camera = new Camera(new Vector3(0f, 5f, 10f));
+            camera = new Camera(new Vector3(0f, 10f, 0f));
             CursorState = CursorState.Grabbed;
 
             // Shader
@@ -95,26 +97,41 @@ namespace minecraft
             GL.DeleteShader(vertexShader);
             GL.DeleteShader(fragmentShader);
 
-            // Texture atlas + BlockRegistry
+            // Texture atlas
             TextureAtlas atlas = new TextureAtlas("../../../Texture/atlas.png", 16);
             BlockRegistry.Init();
 
             cubeBlock = new Block(vertices, indices, atlas.TextureID);
 
-            // World
+            // World et gameplay
             world = new World(cubeBlock);
+            interactor = new BlockInteractor(world, camera);
 
+            crosshair = new CrosshairRenderer();
+            crosshair.Init();
         }
 
         protected override void OnUpdateFrame(FrameEventArgs args)
         {
+            base.OnUpdateFrame(args);
+
             camera.ProcessKeyboard(KeyboardState, (float)args.Time);
             camera.ProcessMouse(MousePosition);
+
+            interactor.Update(
+                MouseState.IsButtonDown(MouseButton.Left),
+                MouseState.IsButtonDown(MouseButton.Right)
+            );
+
+            world.Update(camera.Position);
         }
 
         protected override void OnRenderFrame(FrameEventArgs args)
         {
+            base.OnRenderFrame(args);
+
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+
             GL.UseProgram(shaderProgram);
 
             Matrix4 view = camera.GetViewMatrix();
@@ -128,24 +145,21 @@ namespace minecraft
             GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "view"), false, ref view);
             GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "projection"), false, ref projection);
 
-            for (int c = 0; c < world.Chunks.Count; c++)
+            // Rendu chunks
+            foreach (var (chunk, pos) in world.GetActiveChunks())
             {
-                Chunk chunk = world.Chunks[c];
-                Vector3 chunkPos = world.ChunkPositions[c];
-
-                chunk.BuildMesh(cubeBlock);
-
-                GL.UseProgram(shaderProgram);
                 GL.ActiveTexture(TextureUnit.Texture0);
                 GL.BindTexture(TextureTarget.Texture2D, cubeBlock.Texture);
                 GL.Uniform1(GL.GetUniformLocation(shaderProgram, "ourTexture"), 0);
 
-                Matrix4 model = Matrix4.CreateTranslation(chunkPos);
+                Matrix4 model = Matrix4.CreateTranslation(pos);
                 GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "model"), false, ref model);
 
                 chunk.Mesh.Draw();
             }
 
+            // Crosshair
+            crosshair.Draw();
 
             SwapBuffers();
         }
@@ -173,6 +187,6 @@ namespace minecraft
         }
 
         private static string LoadShaderSource(string path)
-            => File.ReadAllText("../../../Shaders/" + path);
+            => System.IO.File.ReadAllText("../../../Shaders/" + path);
     }
 }

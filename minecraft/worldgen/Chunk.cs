@@ -162,5 +162,21 @@ namespace minecraft.worldgen
 
             offset += 4;
         }
+
+        public void SetBlock(int x, int y, int z, BlockType type)
+        {
+            if (x < 0 || x >= SIZE || y < 0 || y >= Height || z < 0 || z >= SIZE)
+                return;
+
+            blocks[x, y, z] = new BlockData(type);
+        }
+
+        public bool IsInside(int x, int y, int z)
+        {
+            return x >= 0 && x < SIZE &&
+                   y >= 0 && y < Height &&
+                   z >= 0 && z < SIZE;
+        }
+
     }
 }
