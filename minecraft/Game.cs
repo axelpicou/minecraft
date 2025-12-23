@@ -15,6 +15,8 @@ namespace minecraft
         private World world;
         private Camera camera;
         private Block cubeBlock;
+        private BlockSelector selector;
+
         private int shaderProgram;
 
         private BlockInteractor interactor;
@@ -65,6 +67,7 @@ namespace minecraft
             20,21,22,22,23,20
         };
 
+
         public Game(int width, int height)
             : base(GameWindowSettings.Default,
                   new NativeWindowSettings()
@@ -79,6 +82,8 @@ namespace minecraft
         protected override void OnLoad()
         {
             base.OnLoad();
+
+            GL.Viewport(0, 0, Size.X, Size.Y);
 
             GL.ClearColor(0.2f, 0.3f, 0.3f, 1f);
             GL.Enable(EnableCap.DepthTest);
@@ -105,7 +110,9 @@ namespace minecraft
 
             // World et gameplay
             world = new World(cubeBlock);
-            interactor = new BlockInteractor(world, camera);
+            selector = new BlockSelector(world, camera, shaderProgram);
+
+            interactor = new BlockInteractor(world, camera, selector);
 
             crosshair = new CrosshairRenderer();
             crosshair.Init();
@@ -118,10 +125,7 @@ namespace minecraft
             camera.ProcessKeyboard(KeyboardState, (float)args.Time);
             camera.ProcessMouse(MousePosition);
 
-            interactor.Update(
-                MouseState.IsButtonDown(MouseButton.Left),
-                MouseState.IsButtonDown(MouseButton.Right)
-            );
+            interactor.Update(KeyboardState, MouseState);
 
             world.Update(camera.Position);
         }
@@ -130,38 +134,46 @@ namespace minecraft
         {
             base.OnRenderFrame(args);
 
+            GL.Viewport(0, 0, Size.X, Size.Y);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-
-            GL.UseProgram(shaderProgram);
 
             Matrix4 view = camera.GetViewMatrix();
             Matrix4 projection = Matrix4.CreatePerspectiveFieldOfView(
                 MathHelper.DegreesToRadians(45f),
                 Size.X / (float)Size.Y,
-                0.1f,
-                500f
+                0.1f, 500f
             );
-
-            GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "view"), false, ref view);
-            GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "projection"), false, ref projection);
 
             // Rendu chunks
             foreach (var (chunk, pos) in world.GetActiveChunks())
             {
+                GL.UseProgram(shaderProgram);
+
                 GL.ActiveTexture(TextureUnit.Texture0);
                 GL.BindTexture(TextureTarget.Texture2D, cubeBlock.Texture);
                 GL.Uniform1(GL.GetUniformLocation(shaderProgram, "ourTexture"), 0);
 
                 Matrix4 model = Matrix4.CreateTranslation(pos);
                 GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "model"), false, ref model);
+                GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "view"), false, ref view);
+                GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "projection"), false, ref projection);
 
                 chunk.Mesh.Draw();
             }
+
+            // Selector / outline
+            selector.Update(view, projection);
 
             // Crosshair
             crosshair.Draw();
 
             SwapBuffers();
+        }
+
+        protected override void OnResize(OpenTK.Windowing.Common.ResizeEventArgs e)
+        {
+            base.OnResize(e);
+            GL.Viewport(0, 0, Size.X, Size.Y);
         }
 
         protected override void OnUnload()

@@ -113,10 +113,15 @@ namespace minecraft.worldgen
             int y = (int)localPos.Y;
             int z = (int)localPos.Z;
 
-            if (x < 0 || x >= Chunk.SIZE || y < 0 || y >= Chunk.Height || z < 0 || z >= Chunk.SIZE)
+            if (x < 0 || x >= Chunk.SIZE ||
+                y < 0 || y >= Chunk.Height ||
+                z < 0 || z >= Chunk.SIZE)
                 return;
 
             chunk.SetBlock(x, y, z, type);
+
+            // IMPORTANT : rebuild du mesh
+            chunk.BuildMesh(blockTemplate);
         }
 
     }
