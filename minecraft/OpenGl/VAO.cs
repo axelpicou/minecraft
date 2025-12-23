@@ -1,6 +1,6 @@
 ﻿using OpenTK.Graphics.OpenGL4;
 
-namespace minecraft
+namespace minecraft.OpenGl
 {
     public class VAO
     {
