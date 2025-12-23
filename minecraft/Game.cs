@@ -7,6 +7,7 @@ using OpenTK.Windowing.Desktop;
 using minecraft.worldgen;
 using minecraft.Gameplay;
 using minecraft.Graphics;
+using SimplexNoise;
 
 namespace minecraft
 {
@@ -101,7 +102,8 @@ namespace minecraft
             cubeBlock = new Block(vertices, indices, atlas.TextureID);
 
             // World
-            world = new World();
+            world = new World(cubeBlock);
+
         }
 
         protected override void OnUpdateFrame(FrameEventArgs args)

@@ -5,30 +5,46 @@ namespace minecraft.worldgen
 {
     public class World
     {
-        public List<Chunk> Chunks { get; private set; } = new List<Chunk>();
-        public List<Vector3> ChunkPositions { get; private set; } = new List<Vector3>(); // OK
+        public List<Chunk> Chunks { get; private set; } = new();
+        public List<Vector3> ChunkPositions { get; private set; } = new();
 
-        private int gridwidth;
-        private int griddepth;
+        private int gridWidth;
+        private int gridDepth;
 
-        public World(int width = 10, int depth = 10)
+        private Block blockTemplate;
+
+        public World(Block blockTemplate, int width = 10, int depth = 10)
         {
-            gridwidth = width;
-            griddepth = depth;
+            this.blockTemplate = blockTemplate;
+            gridWidth = width;
+            gridDepth = depth;
+
             GenerateWorld();
         }
 
         private void GenerateWorld()
         {
-            for (int cx = 0; cx < gridwidth; cx++)
+            for (int cx = 0; cx < gridWidth; cx++)
             {
-                for (int cz = 0; cz < griddepth; cz++)
+                for (int cz = 0; cz < gridDepth; cz++)
                 {
                     Chunk chunk = new Chunk();
-                    Vector3 chunkPos = new Vector3(cx * Chunk.SIZE, 0, cz * Chunk.SIZE);
-                    chunk.GenerateTerrain(chunkPos); // ça utilise OpenTK.Mathematics.Vector3
+
+                    // Position monde (rendu)
+                    Vector3 chunkWorldPos = new Vector3(
+                        cx * Chunk.SIZE,
+                        0,
+                        cz * Chunk.SIZE
+                    );
+
+                    // Coordonnées chunk (logique)
+                    Vector2i chunkCoord = new Vector2i(cx, cz);
+
+                    chunk.GenerateTerrain(chunkCoord);
+                    chunk.BuildMesh(blockTemplate);
+
                     Chunks.Add(chunk);
-                    ChunkPositions.Add(chunkPos);
+                    ChunkPositions.Add(chunkWorldPos);
                 }
             }
         }
