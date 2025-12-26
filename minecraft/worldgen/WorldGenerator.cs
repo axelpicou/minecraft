@@ -88,13 +88,11 @@ namespace minecraft.worldgen
                         chunkPos.Y * Chunk.SIZE + z
                     );
 
-                    if (biome.TreeDensity <= 0f)
+                    if (biome.TreeDensity <= 0f || rng.NextDouble() > biome.TreeDensity)
                         continue;
 
-                    if (rng.NextDouble() > biome.TreeDensity)
-                        continue;
+                    TreeGenerator.GenerateTree(chunk, chunkPos, x, y + 1, z, rng, biome);
 
-                    TreeGenerator.GenerateTree(chunk, chunkPos, x, y + 1, z, rng);
                 }
         }
 
