@@ -7,20 +7,20 @@ namespace minecraft.worldgen
 {
     public class World
     {
-        // Dictionnaire de chunks actifs
         private Dictionary<Vector2i, Chunk> activeChunks = new();
-
-        // Taille de la zone de génération autour de la caméra
-        private const int VIEW_RADIUS = 20; // 5 chunks autour → 10x10
-
+        private const int VIEW_RADIUS = 5;
         private Block blockTemplate;
+        private WorldGenerator generator;
 
-        public World(Block blockTemplate)
+        public World(Block blockTemplate, int seed = 12345)
         {
             this.blockTemplate = blockTemplate;
+            this.generator = new WorldGenerator(seed);
         }
 
-        // Appelée à chaque frame pour maintenir les chunks autour de la caméra
+        // Permet de modifier les paramètres de génération
+        public WorldGenerator GetGenerator() => generator;
+
         public void Update(Vector3 cameraPosition)
         {
             Vector2i camChunk = new Vector2i(
@@ -39,16 +39,17 @@ namespace minecraft.worldgen
 
                     if (!activeChunks.ContainsKey(chunkCoord))
                     {
-                        // Génère et build le chunk
                         Chunk chunk = new Chunk();
-                        chunk.GenerateTerrain(chunkCoord);
-                        chunk.BuildMesh(blockTemplate, chunkCoord); // ✅ Passer chunkCoord
+
+                        // ✅ Utiliser le nouveau WorldGenerator
+                        generator.GenerateChunkTerrain(chunk, chunkCoord);
+
+                        chunk.BuildMesh(blockTemplate, chunkCoord);
                         activeChunks.Add(chunkCoord, chunk);
                     }
                 }
             }
 
-            // Supprime les chunks trop éloignés
             var toRemove = activeChunks.Keys.Where(c => !neededChunks.Contains(c)).ToList();
             foreach (var c in toRemove)
             {
@@ -57,14 +58,11 @@ namespace minecraft.worldgen
             }
         }
 
-        // Permet d'itérer sur tous les chunks actifs pour le rendu
         public IEnumerable<(Chunk chunk, Vector3 position)> GetActiveChunks()
         {
             foreach (var kvp in activeChunks)
             {
                 Chunk chunk = kvp.Value;
-
-                // ✅ Plus besoin de position : les vertices sont en coordonnées monde
                 Vector3 pos = Vector3.Zero;
                 yield return (chunk, pos);
             }
@@ -83,11 +81,10 @@ namespace minecraft.worldgen
             int localX = (int)(worldX - chunkCoord.X * Chunk.SIZE);
             int localZ = (int)(worldZ - chunkCoord.Y * Chunk.SIZE);
 
-            // Cherche la plus haute bloc non-air dans le chunk
             for (int y = Chunk.Height - 1; y >= 0; y--)
             {
                 if (chunk.GetBlock(localX, y, localZ).Type != BlockType.Air)
-                    return y + 1; // +1 pour que la caméra soit au-dessus
+                    return y + 1;
             }
 
             return 0;
@@ -120,9 +117,7 @@ namespace minecraft.worldgen
                 return;
 
             chunk.SetBlock(x, y, z, type);
-
-            // IMPORTANT : rebuild du mesh avec les coordonnées du chunk
-            chunk.BuildMesh(blockTemplate, chunkCoord); // ✅ Passer chunkCoord
+            chunk.BuildMesh(blockTemplate, chunkCoord);
         }
     }
 }

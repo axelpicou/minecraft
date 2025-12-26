@@ -109,7 +109,12 @@ namespace minecraft
             cubeBlock = new Block(vertices, indices, atlas.TextureID);
 
             // World et gameplay
-            world = new World(cubeBlock);
+            world = new World(cubeBlock, seed: 12345);
+
+            world.GetGenerator().SetBiomeScale(0.015f);
+            world.GetGenerator().GetBiome(BiomeType.Mountains).BaseHeight = 12;
+
+
             selector = new BlockSelector(world, camera, shaderProgram);
 
             interactor = new BlockInteractor(world, camera, selector);

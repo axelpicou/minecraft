@@ -1,26 +1,25 @@
 ﻿using OpenTK.Mathematics;
 using System.Collections.Generic;
-using SimplexNoise;
 
 namespace minecraft.worldgen
 {
     public class Chunk
     {
         public const int SIZE = 16;
-        public const int Height = 16;
+        public const int Height = 256;
         public const int ATLAS_TILES = 16;
 
         private BlockData[,,] blocks = new BlockData[SIZE, Height, SIZE];
         public ChunkMesh Mesh { get; private set; } = new ChunkMesh();
 
         // =============================
-        // TERRAIN GENERATION
+        // TERRAIN GENERATION (LEGACY - Conservé pour compatibilité)
         // =============================
         public void GenerateTerrain(Vector2i chunkPos)
         {
             const int minHeight = 2;
             const int maxHeight = Height - 1;
-            const float scale = 0.1f;   // taille des collines
+            const float scale = 0.1f;
             const int octaves = 4;
             const float persistence = 0.5f;
             const float lacunarity = 2f;
@@ -37,12 +36,10 @@ namespace minecraft.worldgen
                     float frequency = scale;
                     float maxValue = 0f;
 
-                    // Multi-octaves
                     for (int o = 0; o < octaves; o++)
                     {
-                        // Fonction mathématique pseudo-perlin : combinaison de sin et cos
                         float n = (float)(Math.Sin(worldX * frequency) + Math.Cos(worldZ * frequency));
-                        n /= 2f; // normalisation [-1,1]
+                        n /= 2f;
 
                         noise += n * amplitude;
                         maxValue += amplitude;
@@ -51,14 +48,12 @@ namespace minecraft.worldgen
                         frequency *= lacunarity;
                     }
 
-                    // Normalisation [0,1]
                     noise /= maxValue;
                     noise = (noise + 1f) * 0.5f;
 
                     int height = minHeight + (int)(noise * (maxHeight - minHeight));
                     height = Math.Clamp(height, 0, Height);
 
-                    // Remplissage du chunk
                     for (int y = 0; y < Height; y++)
                     {
                         if (y < height - 1)
@@ -91,7 +86,7 @@ namespace minecraft.worldgen
         // =============================
         // MESH BUILDING
         // =============================
-        public void BuildMesh(Block blockTemplate, Vector2i chunkPos) // ✅ Ajout de chunkPos
+        public void BuildMesh(Block blockTemplate, Vector2i chunkPos)
         {
             List<float> vertices = new();
             List<uint> indices = new();
@@ -107,7 +102,6 @@ namespace minecraft.worldgen
 
                         BlockDefinition def = BlockRegistry.Get(b.Type);
 
-                        // ✅ Position en coordonnées MONDE
                         Vector3 pos = new Vector3(
                             chunkPos.X * SIZE + x,
                             y,
@@ -140,7 +134,7 @@ namespace minecraft.worldgen
             float tileSize = 1f / ATLAS_TILES;
 
             int xTile = texIndex % ATLAS_TILES;
-            int yTile = ATLAS_TILES - 1 - (texIndex / ATLAS_TILES); // Y inversé
+            int yTile = ATLAS_TILES - 1 - (texIndex / ATLAS_TILES);
 
             float uMin = xTile * tileSize;
             float vMin = yTile * tileSize;
