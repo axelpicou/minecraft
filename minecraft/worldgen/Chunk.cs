@@ -72,14 +72,6 @@ namespace minecraft.worldgen
             }
         }
 
-
-
-
-
-
-
-
-
         // =============================
         // BLOCK ACCESS
         // =============================
@@ -99,7 +91,7 @@ namespace minecraft.worldgen
         // =============================
         // MESH BUILDING
         // =============================
-        public void BuildMesh(Block blockTemplate)
+        public void BuildMesh(Block blockTemplate, Vector2i chunkPos) // ✅ Ajout de chunkPos
         {
             List<float> vertices = new();
             List<uint> indices = new();
@@ -114,7 +106,13 @@ namespace minecraft.worldgen
                             continue;
 
                         BlockDefinition def = BlockRegistry.Get(b.Type);
-                        Vector3 pos = new Vector3(x, y, z);
+
+                        // ✅ Position en coordonnées MONDE
+                        Vector3 pos = new Vector3(
+                            chunkPos.X * SIZE + x,
+                            y,
+                            chunkPos.Y * SIZE + z
+                        );
 
                         AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Front, IsAir(x, y, z + 1), def.GetTexture(BlockFace.Front));
                         AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Back, IsAir(x, y, z - 1), def.GetTexture(BlockFace.Back));
@@ -177,6 +175,5 @@ namespace minecraft.worldgen
                    y >= 0 && y < Height &&
                    z >= 0 && z < SIZE;
         }
-
     }
 }

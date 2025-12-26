@@ -11,7 +11,7 @@ namespace minecraft.worldgen
         private Dictionary<Vector2i, Chunk> activeChunks = new();
 
         // Taille de la zone de génération autour de la caméra
-        private const int VIEW_RADIUS = 5; // 5 chunks autour → 10x10
+        private const int VIEW_RADIUS = 20; // 5 chunks autour → 10x10
 
         private Block blockTemplate;
 
@@ -42,7 +42,7 @@ namespace minecraft.worldgen
                         // Génère et build le chunk
                         Chunk chunk = new Chunk();
                         chunk.GenerateTerrain(chunkCoord);
-                        chunk.BuildMesh(blockTemplate);
+                        chunk.BuildMesh(blockTemplate, chunkCoord); // ✅ Passer chunkCoord
                         activeChunks.Add(chunkCoord, chunk);
                     }
                 }
@@ -57,15 +57,15 @@ namespace minecraft.worldgen
             }
         }
 
-        // Permet d’itérer sur tous les chunks actifs pour le rendu
+        // Permet d'itérer sur tous les chunks actifs pour le rendu
         public IEnumerable<(Chunk chunk, Vector3 position)> GetActiveChunks()
         {
             foreach (var kvp in activeChunks)
             {
-                Vector2i coord = kvp.Key;
                 Chunk chunk = kvp.Value;
 
-                Vector3 pos = new Vector3(coord.X * Chunk.SIZE, 0, coord.Y * Chunk.SIZE);
+                // ✅ Plus besoin de position : les vertices sont en coordonnées monde
+                Vector3 pos = Vector3.Zero;
                 yield return (chunk, pos);
             }
         }
@@ -92,6 +92,7 @@ namespace minecraft.worldgen
 
             return 0;
         }
+
         public Chunk GetChunkAtWorldPos(Vector3 worldPos)
         {
             Vector2i chunkCoord = new Vector2i(
@@ -120,9 +121,8 @@ namespace minecraft.worldgen
 
             chunk.SetBlock(x, y, z, type);
 
-            // IMPORTANT : rebuild du mesh
-            chunk.BuildMesh(blockTemplate);
+            // IMPORTANT : rebuild du mesh avec les coordonnées du chunk
+            chunk.BuildMesh(blockTemplate, chunkCoord); // ✅ Passer chunkCoord
         }
-
     }
 }

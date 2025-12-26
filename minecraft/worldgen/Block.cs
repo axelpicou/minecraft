@@ -51,7 +51,6 @@ namespace minecraft.worldgen
             Vao.Unbind();
         }
 
-        // Met à jour les UV pour une face
         private void UpdateUVs(int textureIndex)
         {
             float tileSize = 1f / atlasTiles;
@@ -77,7 +76,6 @@ namespace minecraft.worldgen
             GL.BufferSubData(BufferTarget.ArrayBuffer, 0, vertices.Length * sizeof(float), vertices);
         }
 
-        // Dessine UNE face
         public void DrawFace(Vector3 position, int shaderProgram, int textureIndex, BlockFace face)
         {
             GL.UseProgram(shaderProgram);
@@ -87,74 +85,80 @@ namespace minecraft.worldgen
 
             UpdateUVs(textureIndex);
 
-            Matrix4 model = Matrix4.CreateTranslation(position);
+            Matrix4 model = Matrix4.Identity;
             GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "model"), false, ref model);
 
             Vao.Bind();
-
-            int offset = (int)face * 6; // 1 face = 6 indices
+            int offset = (int)face * 6;
             GL.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, offset * sizeof(uint));
-
             Vao.Unbind();
         }
 
+        // ✅ CORRECTION : Les blocs occupent maintenant l'espace de (X,Y,Z) à (X+1,Y+1,Z+1)
         public float[] GetFaceVertices(BlockFace face, Vector3 pos, float uMin, float vMin, float uMax, float vMax)
         {
-            // Retourne les 4 sommets avec positions + UV pour la face
+            // pos représente le coin inférieur gauche arrière du bloc
+            float x0 = pos.X;
+            float y0 = pos.Y;
+            float z0 = pos.Z;
+            float x1 = pos.X + 1f;
+            float y1 = pos.Y + 1f;
+            float z1 = pos.Z + 1f;
+
             switch (face)
             {
-                case BlockFace.Front:
+                case BlockFace.Front: // Z+
                     return new float[]
                     {
-                pos.X-0.5f,pos.Y-0.5f,pos.Z+0.5f,uMin,vMin,
-                pos.X+0.5f,pos.Y-0.5f,pos.Z+0.5f,uMax,vMin,
-                pos.X+0.5f,pos.Y+0.5f,pos.Z+0.5f,uMax,vMax,
-                pos.X-0.5f,pos.Y+0.5f,pos.Z+0.5f,uMin,vMax
+                        x0, y0, z1, uMin, vMin,
+                        x1, y0, z1, uMax, vMin,
+                        x1, y1, z1, uMax, vMax,
+                        x0, y1, z1, uMin, vMax
                     };
-                case BlockFace.Back:
+                case BlockFace.Back: // Z-
                     return new float[]
                     {
-                pos.X+0.5f,pos.Y-0.5f,pos.Z-0.5f,uMin,vMin,
-                pos.X-0.5f,pos.Y-0.5f,pos.Z-0.5f,uMax,vMin,
-                pos.X-0.5f,pos.Y+0.5f,pos.Z-0.5f,uMax,vMax,
-                pos.X+0.5f,pos.Y+0.5f,pos.Z-0.5f,uMin,vMax
+                        x1, y0, z0, uMin, vMin,
+                        x0, y0, z0, uMax, vMin,
+                        x0, y1, z0, uMax, vMax,
+                        x1, y1, z0, uMin, vMax
                     };
-                case BlockFace.Left:
+                case BlockFace.Left: // X-
                     return new float[]
                     {
-                pos.X-0.5f,pos.Y-0.5f,pos.Z-0.5f,uMin,vMin,
-                pos.X-0.5f,pos.Y-0.5f,pos.Z+0.5f,uMax,vMin,
-                pos.X-0.5f,pos.Y+0.5f,pos.Z+0.5f,uMax,vMax,
-                pos.X-0.5f,pos.Y+0.5f,pos.Z-0.5f,uMin,vMax
+                        x0, y0, z0, uMin, vMin,
+                        x0, y0, z1, uMax, vMin,
+                        x0, y1, z1, uMax, vMax,
+                        x0, y1, z0, uMin, vMax
                     };
-                case BlockFace.Right:
+                case BlockFace.Right: // X+
                     return new float[]
                     {
-                pos.X+0.5f,pos.Y-0.5f,pos.Z+0.5f,uMin,vMin,
-                pos.X+0.5f,pos.Y-0.5f,pos.Z-0.5f,uMax,vMin,
-                pos.X+0.5f,pos.Y+0.5f,pos.Z-0.5f,uMax,vMax,
-                pos.X+0.5f,pos.Y+0.5f,pos.Z+0.5f,uMin,vMax
+                        x1, y0, z1, uMin, vMin,
+                        x1, y0, z0, uMax, vMin,
+                        x1, y1, z0, uMax, vMax,
+                        x1, y1, z1, uMin, vMax
                     };
-                case BlockFace.Top:
+                case BlockFace.Top: // Y+
                     return new float[]
                     {
-                pos.X-0.5f,pos.Y+0.5f,pos.Z+0.5f,uMin,vMin,
-                pos.X+0.5f,pos.Y+0.5f,pos.Z+0.5f,uMax,vMin,
-                pos.X+0.5f,pos.Y+0.5f,pos.Z-0.5f,uMax,vMax,
-                pos.X-0.5f,pos.Y+0.5f,pos.Z-0.5f,uMin,vMax
+                        x0, y1, z1, uMin, vMin,
+                        x1, y1, z1, uMax, vMin,
+                        x1, y1, z0, uMax, vMax,
+                        x0, y1, z0, uMin, vMax
                     };
-                case BlockFace.Bottom:
+                case BlockFace.Bottom: // Y-
                     return new float[]
                     {
-                pos.X-0.5f,pos.Y-0.5f,pos.Z-0.5f,uMin,vMin,
-                pos.X+0.5f,pos.Y-0.5f,pos.Z-0.5f,uMax,vMin,
-                pos.X+0.5f,pos.Y-0.5f,pos.Z+0.5f,uMax,vMax,
-                pos.X-0.5f,pos.Y-0.5f,pos.Z+0.5f,uMin,vMax
+                        x0, y0, z0, uMin, vMin,
+                        x1, y0, z0, uMax, vMin,
+                        x1, y0, z1, uMax, vMax,
+                        x0, y0, z1, uMin, vMax
                     };
-                default: return new float[0];
+                default:
+                    return new float[0];
             }
         }
-
 
         public void Delete()
         {

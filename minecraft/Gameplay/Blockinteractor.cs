@@ -19,38 +19,62 @@ namespace minecraft.Gameplay
 
         public void Update(KeyboardState keyboard, MouseState mouse)
         {
-            if (!selector.HasHit) return;
+            if (!selector.HasHit)
+                return;
 
-            Vector3 targetBlock = selector.HitBlock;
+            Vector3Int hitVoxel = selector.HitVoxel;
             Vector3Int normal = selector.FaceNormal;
 
-            Vector3 placePos = targetBlock + new Vector3(normal.X, normal.Y, normal.Z);
-
-            Vector2i chunkCoord = new Vector2i(
-                (int)MathF.Floor(placePos.X / Chunk.SIZE),
-                (int)MathF.Floor(placePos.Z / Chunk.SIZE)
-            );
-
-            Vector3 localPos = new Vector3(
-                placePos.X - chunkCoord.X * Chunk.SIZE,
-                placePos.Y,
-                placePos.Z - chunkCoord.Y * Chunk.SIZE
-            );
-
-            if (mouse.IsButtonDown(MouseButton.Left))
+            // ----------------------
+            // CASSER LE BLOC
+            // ----------------------
+            if (mouse.IsButtonPressed(MouseButton.Left))
             {
-                // Casser
-                world.SetBlock(new Vector2i(
-                    (int)MathF.Floor(targetBlock.X / Chunk.SIZE),
-                    (int)MathF.Floor(targetBlock.Z / Chunk.SIZE)
-                ), targetBlock, BlockType.Air);
+                Vector2i chunkCoord = new Vector2i(
+                    WorldToChunk(hitVoxel.X),
+                    WorldToChunk(hitVoxel.Z)
+                );
+
+                Vector3 localPos = new Vector3(
+                    MathMod(hitVoxel.X, Chunk.SIZE),
+                    hitVoxel.Y,
+                    MathMod(hitVoxel.Z, Chunk.SIZE)
+                );
+
+                world.SetBlock(chunkCoord, localPos, BlockType.Air);
             }
 
-            if (mouse.IsButtonDown(MouseButton.Right))
+            // ----------------------
+            // POSER SUR LA FACE VISÉE
+            // ----------------------
+            if (mouse.IsButtonPressed(MouseButton.Right))
             {
-                // Placer
+                Vector3Int placeVoxel = hitVoxel + normal;
+
+                Vector2i chunkCoord = new Vector2i(
+                    WorldToChunk(placeVoxel.X),
+                    WorldToChunk(placeVoxel.Z)
+                );
+
+                Vector3 localPos = new Vector3(
+                    MathMod(placeVoxel.X, Chunk.SIZE),
+                    placeVoxel.Y,
+                    MathMod(placeVoxel.Z, Chunk.SIZE)
+                );
+
                 world.SetBlock(chunkCoord, localPos, BlockType.Stone);
             }
+        }
+
+        private int WorldToChunk(int world)
+        {
+            return (int)MathF.Floor((float)world / Chunk.SIZE);
+        }
+
+        private int MathMod(int a, int b)
+        {
+            int r = a % b;
+            return r < 0 ? r + b : r;
         }
     }
 }

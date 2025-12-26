@@ -145,7 +145,7 @@ namespace minecraft
             );
 
             // Rendu chunks
-            foreach (var (chunk, pos) in world.GetActiveChunks())
+            foreach (var (chunk, _) in world.GetActiveChunks()) // ✅ pos ignoré avec _
             {
                 GL.UseProgram(shaderProgram);
 
@@ -153,7 +153,8 @@ namespace minecraft
                 GL.BindTexture(TextureTarget.Texture2D, cubeBlock.Texture);
                 GL.Uniform1(GL.GetUniformLocation(shaderProgram, "ourTexture"), 0);
 
-                Matrix4 model = Matrix4.CreateTranslation(pos);
+                // ✅ Matrix4.Identity : pas de translation, vertices déjà en coordonnées monde
+                Matrix4 model = Matrix4.Identity;
                 GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "model"), false, ref model);
                 GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "view"), false, ref view);
                 GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "projection"), false, ref projection);
