@@ -25,17 +25,57 @@ namespace minecraft.worldgen
             GL.BindVertexArray(Vao);
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, Vbo);
-            GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(float), vertices, BufferUsageHint.StaticDraw);
+            GL.BufferData(
+                BufferTarget.ArrayBuffer,
+                vertices.Length * sizeof(float),
+                vertices,
+                BufferUsageHint.StaticDraw
+            );
 
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, Ebo);
-            GL.BufferData(BufferTarget.ElementArrayBuffer, indices.Length * sizeof(uint), indices, BufferUsageHint.StaticDraw);
+            GL.BufferData(
+                BufferTarget.ElementArrayBuffer,
+                indices.Length * sizeof(uint),
+                indices,
+                BufferUsageHint.StaticDraw
+            );
+
+            // ✅ FORMAT CORRECT :
+            // Position (3) + UV (2) + Color (3) = 8 floats
+            int stride = 8 * sizeof(float);
 
             // Position
-            GL.VertexAttribPointer(0, 3, OpenTK.Graphics.OpenGL4.VertexAttribPointerType.Float, false, 5 * sizeof(float), 0);
+            GL.VertexAttribPointer(
+                0,
+                3,
+                VertexAttribPointerType.Float,
+                false,
+                stride,
+                0
+            );
             GL.EnableVertexAttribArray(0);
+
             // UV
-            GL.VertexAttribPointer(1, 2, OpenTK.Graphics.OpenGL4.VertexAttribPointerType.Float, false, 5 * sizeof(float), 3 * sizeof(float));
+            GL.VertexAttribPointer(
+                1,
+                2,
+                VertexAttribPointerType.Float,
+                false,
+                stride,
+                3 * sizeof(float)
+            );
             GL.EnableVertexAttribArray(1);
+
+            // ✅ Couleur du biome
+            GL.VertexAttribPointer(
+                2,
+                3,
+                VertexAttribPointerType.Float,
+                false,
+                stride,
+                5 * sizeof(float)
+            );
+            GL.EnableVertexAttribArray(2);
 
             GL.BindVertexArray(0);
         }
@@ -43,7 +83,12 @@ namespace minecraft.worldgen
         public void Draw()
         {
             GL.BindVertexArray(Vao);
-            GL.DrawElements(PrimitiveType.Triangles, IndexCount, OpenTK.Graphics.OpenGL4.DrawElementsType.UnsignedInt, 0);
+            GL.DrawElements(
+                PrimitiveType.Triangles,
+                IndexCount,
+                DrawElementsType.UnsignedInt,
+                0
+            );
             GL.BindVertexArray(0);
         }
 

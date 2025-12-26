@@ -10,9 +10,11 @@ namespace minecraft.worldgen
         private int seed;
 
         // Paramètres de bruit pour la sélection de biome
-        private float biomeScale = 0.01f;      // Taille des zones de biome
-        private float temperatureScale = 0.02f;
-        private float humidityScale = 0.015f;
+        private float biomeScale = 0.008f;
+        private float temperatureScale = 0.012f;
+        private float humidityScale = 0.01f;
+
+        private float blendRadius = 32f; // Distance pour transition
 
         public WorldGenerator(int seed = 0)
         {
@@ -34,79 +36,191 @@ namespace minecraft.worldgen
             };
         }
 
-        // Génère le terrain pour un chunk
+        // =========================================
+        // GENERATION CHUNK
+        // =========================================
         public void GenerateChunkTerrain(Chunk chunk, Vector2i chunkPos)
         {
             for (int x = 0; x < Chunk.SIZE; x++)
-            {
                 for (int z = 0; z < Chunk.SIZE; z++)
                 {
                     int worldX = chunkPos.X * Chunk.SIZE + x;
                     int worldZ = chunkPos.Y * Chunk.SIZE + z;
 
-                    // Déterminer le biome pour cette colonne
-                    BiomeData biome = GetBiomeAt(worldX, worldZ);
-
-                    // Générer la hauteur basée sur le biome
-                    int height = GenerateHeight(worldX, worldZ, biome);
+                    var blendedBiome = GetBlendedBiomeAt(worldX, worldZ);
+                    int height = GenerateBlendedHeight(worldX, worldZ, blendedBiome);
                     height = Math.Clamp(height, 0, Chunk.Height - 1);
 
-                    // Remplir la colonne
-                    GenerateColumn(chunk, x, z, height, biome);
+                    Vector3 grassColor = GetBlendedGrassColor(blendedBiome);
+
+                    GenerateColumn(chunk, x, z, height, blendedBiome.dominant, grassColor);
                 }
-            }
+
+            // ✅ Génération des arbres
+            GenerateTrees(chunk, chunkPos);
+
+            // ✅ Appliquer les pending blocks (feuilles hors chunk)
+            chunk.ApplyPendingBlocks(chunkPos);
         }
 
-        // Détermine le biome en fonction de la température et de l'humidité
-        private BiomeData GetBiomeAt(int worldX, int worldZ)
+        // =========================================
+        // TREE GENERATION
+        // =========================================
+        private void GenerateTrees(Chunk chunk, Vector2i chunkPos)
         {
-            // Générer température et humidité avec du bruit
+            Random rng = new Random(seed ^ (chunkPos.X * 73856093) ^ (chunkPos.Y * 19349663));
+
+            for (int x = 1; x < Chunk.SIZE - 1; x++)
+                for (int z = 1; z < Chunk.SIZE - 1; z++)
+                {
+                    if (rng.NextDouble() > 0.02)
+                        continue;
+
+                    int y = FindSurface(chunk, x, z);
+                    if (y < 0)
+                        continue;
+
+                    if (chunk.GetBlock(x, y, z).Type != BlockType.Grass)
+                        continue;
+
+                    BiomeData biome = GetBiomeAtPoint(
+                        chunkPos.X * Chunk.SIZE + x,
+                        chunkPos.Y * Chunk.SIZE + z
+                    );
+
+                    if (biome.TreeDensity <= 0f)
+                        continue;
+
+                    if (rng.NextDouble() > biome.TreeDensity)
+                        continue;
+
+                    TreeGenerator.GenerateTree(chunk, chunkPos, x, y + 1, z, rng);
+                }
+        }
+
+        private int FindSurface(Chunk chunk, int x, int z)
+        {
+            for (int y = Chunk.Height - 2; y >= 1; y--)
+            {
+                if (chunk.GetBlock(x, y, z).Type != BlockType.Air &&
+                    chunk.GetBlock(x, y + 1, z).Type == BlockType.Air)
+                {
+                    return y;
+                }
+            }
+            return -1;
+        }
+
+        // =========================================
+        // BIOME INTERPOLATION
+        // =========================================
+        private Vector3 GetBlendedGrassColor(BlendedBiome blendedBiome)
+        {
+            Vector3 color = Vector3.Zero;
+            foreach (var kvp in blendedBiome.weights)
+            {
+                BiomeData biome = biomes[kvp.Key];
+                color += biome.GrassColor * kvp.Value;
+            }
+            return color;
+        }
+
+        private struct BlendedBiome
+        {
+            public BiomeData dominant;
+            public Dictionary<BiomeType, float> weights;
+        }
+
+        private BlendedBiome GetBlendedBiomeAt(int worldX, int worldZ)
+        {
+            Dictionary<BiomeType, float> biomeWeights = new();
+            int sampleRadius = (int)(blendRadius / 16f);
+            float totalWeight = 0f;
+
+            for (int dx = -sampleRadius; dx <= sampleRadius; dx++)
+                for (int dz = -sampleRadius; dz <= sampleRadius; dz++)
+                {
+                    int sampleX = worldX + dx * 8;
+                    int sampleZ = worldZ + dz * 8;
+
+                    float distance = MathF.Sqrt(dx * dx * 64 + dz * dz * 64);
+                    float weight = Math.Max(0f, 1f - (distance / blendRadius));
+                    weight *= weight;
+
+                    if (weight > 0.01f)
+                    {
+                        BiomeData biome = GetBiomeAtPoint(sampleX, sampleZ);
+
+                        if (!biomeWeights.ContainsKey(biome.Type))
+                            biomeWeights[biome.Type] = 0f;
+
+                        biomeWeights[biome.Type] += weight;
+                        totalWeight += weight;
+                    }
+                }
+
+            if (totalWeight > 0f)
+            {
+                var keys = new List<BiomeType>(biomeWeights.Keys);
+                foreach (var key in keys)
+                    biomeWeights[key] /= totalWeight;
+            }
+
+            BiomeType dominantType = BiomeType.Plains;
+            float maxWeight = 0f;
+            foreach (var kvp in biomeWeights)
+            {
+                if (kvp.Value > maxWeight)
+                {
+                    maxWeight = kvp.Value;
+                    dominantType = kvp.Key;
+                }
+            }
+
+            return new BlendedBiome
+            {
+                dominant = biomes[dominantType],
+                weights = biomeWeights
+            };
+        }
+
+        private BiomeData GetBiomeAtPoint(int worldX, int worldZ)
+        {
             float temperature = GenerateNoise(worldX, worldZ, temperatureScale, seed);
             float humidity = GenerateNoise(worldX, worldZ, humidityScale, seed + 1000);
 
-            // Normaliser entre 0 et 1
             temperature = (temperature + 1f) * 0.5f;
             humidity = (humidity + 1f) * 0.5f;
 
-            // Sélectionner le biome basé sur température/humidité
             return SelectBiome(temperature, humidity);
         }
 
-        // Sélectionne un biome en fonction de température et humidité
         private BiomeData SelectBiome(float temperature, float humidity)
         {
-            // Océan (très bas)
-            if (temperature < 0.2f && humidity > 0.7f)
-                return biomes[BiomeType.Ocean];
+            if (temperature < 0.25f && humidity > 0.65f) return biomes[BiomeType.Ocean];
+            if (temperature < 0.3f) return biomes[BiomeType.Tundra];
+            if (temperature < 0.45f && humidity < 0.5f) return biomes[BiomeType.Mountains];
+            if (temperature > 0.7f && humidity < 0.35f) return biomes[BiomeType.Desert];
+            if (humidity > 0.75f && temperature > 0.5f && temperature < 0.75f) return biomes[BiomeType.Swamp];
+            if (temperature > 0.4f && temperature < 0.7f && humidity > 0.5f) return biomes[BiomeType.Forest];
 
-            // Toundra (froid)
-            if (temperature < 0.3f)
-                return biomes[BiomeType.Tundra];
-
-            // Montagnes (altitude)
-            if (temperature < 0.4f && humidity < 0.5f)
-                return biomes[BiomeType.Mountains];
-
-            // Désert (chaud et sec)
-            if (temperature > 0.7f && humidity < 0.3f)
-                return biomes[BiomeType.Desert];
-
-            // Marais (humide)
-            if (humidity > 0.8f && temperature > 0.5f)
-                return biomes[BiomeType.Swamp];
-
-            // Forêt (tempéré et humide)
-            if (temperature > 0.4f && temperature < 0.7f && humidity > 0.5f)
-                return biomes[BiomeType.Forest];
-
-            // Par défaut : Plaines
             return biomes[BiomeType.Plains];
         }
 
-        // Génère la hauteur du terrain pour une position donnée
-        private int GenerateHeight(int worldX, int worldZ, BiomeData biome)
+        private int GenerateBlendedHeight(int worldX, int worldZ, BlendedBiome blendedBiome)
         {
-            // Bruit multi-octaves pour plus de détail
+            float totalHeight = 0f;
+            foreach (var kvp in blendedBiome.weights)
+            {
+                BiomeData biome = biomes[kvp.Key];
+                float biomeHeight = GenerateHeightForBiome(worldX, worldZ, biome);
+                totalHeight += biomeHeight * kvp.Value;
+            }
+            return (int)totalHeight;
+        }
+
+        private float GenerateHeightForBiome(int worldX, int worldZ, BiomeData biome)
+        {
             float noise = 0f;
             float amplitude = 1f;
             float frequency = biome.HeightScale;
@@ -117,7 +231,7 @@ namespace minecraft.worldgen
 
             for (int o = 0; o < octaves; o++)
             {
-                float n = GenerateNoise(worldX, worldZ, frequency, seed + o);
+                float n = GenerateNoise(worldX, worldZ, frequency, seed + o + (int)biome.Type * 100);
                 noise += n * amplitude;
                 maxValue += amplitude;
 
@@ -125,64 +239,42 @@ namespace minecraft.worldgen
                 frequency *= lacunarity;
             }
 
-            // Normaliser [-1, 1] -> [0, 1]
             noise = (noise / maxValue + 1f) * 0.5f;
-
-            // Appliquer les paramètres du biome
-            int height = biome.BaseHeight + (int)(noise * biome.HeightVariation);
-
-            return height;
+            return biome.BaseHeight + noise * biome.HeightVariation;
         }
 
-        // Génère une colonne de blocs
-        private void GenerateColumn(Chunk chunk, int x, int z, int height, BiomeData biome)
+        private void GenerateColumn(Chunk chunk, int x, int z, int height, BiomeData biome, Vector3 grassColor)
         {
             for (int y = 0; y < Chunk.Height; y++)
             {
                 BlockType blockType;
+                if (y > height) blockType = BlockType.Air;
+                else if (y == height) blockType = biome.SurfaceBlock;
+                else if (y >= height - biome.SubsurfaceDepth) blockType = biome.SubsurfaceBlock;
+                else blockType = biome.StoneBlock;
 
-                if (y > height)
-                {
-                    blockType = BlockType.Air;
-                }
-                else if (y == height)
-                {
-                    blockType = biome.SurfaceBlock;
-                }
-                else if (y >= height - biome.SubsurfaceDepth)
-                {
-                    blockType = biome.SubsurfaceBlock;
-                }
-                else
-                {
-                    blockType = biome.StoneBlock;
-                }
-
-                chunk.SetBlock(x, y, z, blockType);
+                chunk.SetBlock(x, y, z, blockType, blockType == BlockType.Grass ? grassColor : Vector3.One);
             }
         }
 
-        // Génère du bruit Perlin-like
         private float GenerateNoise(int x, int z, float scale, int seedOffset)
         {
             float sampleX = x * scale;
             float sampleZ = z * scale;
 
-            // Utiliser une combinaison de sin/cos pour simuler du Perlin
             float noise = MathF.Sin(sampleX + seedOffset) * MathF.Cos(sampleZ + seedOffset);
             noise += MathF.Sin(sampleX * 2 + seedOffset) * MathF.Cos(sampleZ * 2 + seedOffset) * 0.5f;
             noise += MathF.Sin(sampleX * 4 + seedOffset) * MathF.Cos(sampleZ * 4 + seedOffset) * 0.25f;
 
-            return noise / 1.75f; // Normaliser approximativement entre -1 et 1
+            return noise / 1.75f;
         }
 
-        // Méthodes pour ajuster les paramètres
         public void SetBiomeScale(float scale) => biomeScale = scale;
         public void SetTemperatureScale(float scale) => temperatureScale = scale;
         public void SetHumidityScale(float scale) => humidityScale = scale;
+        public void SetBlendRadius(float radius) => blendRadius = radius;
         public void SetSeed(int newSeed) => seed = newSeed;
 
-        // Obtenir un biome spécifique pour modification
         public BiomeData GetBiome(BiomeType type) => biomes[type];
     }
 }

@@ -3,69 +3,35 @@ using System.Collections.Generic;
 
 namespace minecraft.worldgen
 {
+    public struct PendingBlock
+    {
+        public int WorldX;
+        public int WorldY;
+        public int WorldZ;
+        public BlockType Type;
+
+        public PendingBlock(int x, int y, int z, BlockType type)
+        {
+            WorldX = x;
+            WorldY = y;
+            WorldZ = z;
+            Type = type;
+        }
+    }
+
+
+
+
     public class Chunk
     {
         public const int SIZE = 16;
         public const int Height = 256;
         public const int ATLAS_TILES = 16;
+        public List<PendingBlock> PendingBlocks = new();
+
 
         private BlockData[,,] blocks = new BlockData[SIZE, Height, SIZE];
         public ChunkMesh Mesh { get; private set; } = new ChunkMesh();
-
-        // =============================
-        // TERRAIN GENERATION (LEGACY - Conservé pour compatibilité)
-        // =============================
-        public void GenerateTerrain(Vector2i chunkPos)
-        {
-            const int minHeight = 2;
-            const int maxHeight = Height - 1;
-            const float scale = 0.1f;
-            const int octaves = 4;
-            const float persistence = 0.5f;
-            const float lacunarity = 2f;
-
-            for (int x = 0; x < SIZE; x++)
-            {
-                for (int z = 0; z < SIZE; z++)
-                {
-                    int worldX = chunkPos.X * SIZE + x;
-                    int worldZ = chunkPos.Y * SIZE + z;
-
-                    float noise = 0f;
-                    float amplitude = 1f;
-                    float frequency = scale;
-                    float maxValue = 0f;
-
-                    for (int o = 0; o < octaves; o++)
-                    {
-                        float n = (float)(Math.Sin(worldX * frequency) + Math.Cos(worldZ * frequency));
-                        n /= 2f;
-
-                        noise += n * amplitude;
-                        maxValue += amplitude;
-
-                        amplitude *= persistence;
-                        frequency *= lacunarity;
-                    }
-
-                    noise /= maxValue;
-                    noise = (noise + 1f) * 0.5f;
-
-                    int height = minHeight + (int)(noise * (maxHeight - minHeight));
-                    height = Math.Clamp(height, 0, Height);
-
-                    for (int y = 0; y < Height; y++)
-                    {
-                        if (y < height - 1)
-                            blocks[x, y, z] = new BlockData(BlockType.Dirt);
-                        else if (y == height - 1)
-                            blocks[x, y, z] = new BlockData(BlockType.Grass);
-                        else
-                            blocks[x, y, z] = new BlockData(BlockType.Air);
-                    }
-                }
-            }
-        }
 
         // =============================
         // BLOCK ACCESS
@@ -108,12 +74,64 @@ namespace minecraft.worldgen
                             chunkPos.Y * SIZE + z
                         );
 
-                        AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Front, IsAir(x, y, z + 1), def.GetTexture(BlockFace.Front));
-                        AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Back, IsAir(x, y, z - 1), def.GetTexture(BlockFace.Back));
-                        AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Left, IsAir(x - 1, y, z), def.GetTexture(BlockFace.Left));
-                        AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Right, IsAir(x + 1, y, z), def.GetTexture(BlockFace.Right));
-                        AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Top, IsAir(x, y + 1, z), def.GetTexture(BlockFace.Top));
-                        AddFace(vertices, indices, ref offset, blockTemplate, pos, BlockFace.Bottom, IsAir(x, y - 1, z), def.GetTexture(BlockFace.Bottom));
+                        // =============================
+                        // 🎨 COULEUR PAR FACE (BONUS)
+                        // =============================
+
+                        // Couleur par défaut (neutre)
+                        Vector3 white = Vector3.One;
+
+                        // Couleur du biome uniquement pour l'herbe (face TOP)
+                        Vector3 grassTopColor =
+                            (b.Type == BlockType.Grass) ? b.BiomeColor : Vector3.One;
+
+                        // FRONT
+                        AddFace(vertices, indices, ref offset, blockTemplate, pos,
+                            BlockFace.Front,
+                            IsAir(x, y, z + 1),
+                            def.GetTexture(BlockFace.Front),
+                            white
+                        );
+
+                        // BACK
+                        AddFace(vertices, indices, ref offset, blockTemplate, pos,
+                            BlockFace.Back,
+                            IsAir(x, y, z - 1),
+                            def.GetTexture(BlockFace.Back),
+                            white
+                        );
+
+                        // LEFT
+                        AddFace(vertices, indices, ref offset, blockTemplate, pos,
+                            BlockFace.Left,
+                            IsAir(x - 1, y, z),
+                            def.GetTexture(BlockFace.Left),
+                            white
+                        );
+
+                        // RIGHT
+                        AddFace(vertices, indices, ref offset, blockTemplate, pos,
+                            BlockFace.Right,
+                            IsAir(x + 1, y, z),
+                            def.GetTexture(BlockFace.Right),
+                            white
+                        );
+
+                        // TOP 🌱 (HERBE TEINTÉE)
+                        AddFace(vertices, indices, ref offset, blockTemplate, pos,
+                            BlockFace.Top,
+                            IsAir(x, y + 1, z),
+                            def.GetTexture(BlockFace.Top),
+                            grassTopColor
+                        );
+
+                        // BOTTOM
+                        AddFace(vertices, indices, ref offset, blockTemplate, pos,
+                            BlockFace.Bottom,
+                            IsAir(x, y - 1, z),
+                            def.GetTexture(BlockFace.Bottom),
+                            white
+                        );
                     }
 
             Mesh.Build(vertices.ToArray(), indices.ToArray());
@@ -127,7 +145,8 @@ namespace minecraft.worldgen
             Vector3 pos,
             BlockFace face,
             bool visible,
-            int texIndex)
+            int texIndex,
+            Vector3 color)
         {
             if (!visible) return;
 
@@ -142,7 +161,11 @@ namespace minecraft.worldgen
             float vMax = vMin + tileSize;
 
             verts.AddRange(
-                blockTemplate.GetFaceVertices(face, pos, uMin, vMin, uMax, vMax)
+                blockTemplate.GetFaceVerticesWithColor(
+                    face, pos,
+                    uMin, vMin, uMax, vMax,
+                    color
+                )
             );
 
             inds.Add(offset + 0);
@@ -155,12 +178,18 @@ namespace minecraft.worldgen
             offset += 4;
         }
 
-        public void SetBlock(int x, int y, int z, BlockType type)
+        // =============================
+        // SET BLOCK
+        // =============================
+        public void SetBlock(int x, int y, int z, BlockType type, Vector3 biomeColor = default)
         {
             if (x < 0 || x >= SIZE || y < 0 || y >= Height || z < 0 || z >= SIZE)
                 return;
 
-            blocks[x, y, z] = new BlockData(type);
+            if (biomeColor == default)
+                biomeColor = Vector3.One;
+
+            blocks[x, y, z] = new BlockData(type, 0, biomeColor);
         }
 
         public bool IsInside(int x, int y, int z)
@@ -169,5 +198,28 @@ namespace minecraft.worldgen
                    y >= 0 && y < Height &&
                    z >= 0 && z < SIZE;
         }
+
+        public void ApplyPendingBlocks(Vector2i chunkPos)
+        {
+            int baseX = chunkPos.X * SIZE;
+            int baseZ = chunkPos.Y * SIZE;
+
+            for (int i = PendingBlocks.Count - 1; i >= 0; i--)
+            {
+                PendingBlock pb = PendingBlocks[i];
+
+                int lx = pb.WorldX - baseX;
+                int lz = pb.WorldZ - baseZ;
+
+                if (lx >= 0 && lx < SIZE &&
+                    lz >= 0 && lz < SIZE &&
+                    pb.WorldY >= 0 && pb.WorldY < Height)
+                {
+                    SetBlock(lx, pb.WorldY, lz, pb.Type);
+                    PendingBlocks.RemoveAt(i);
+                }
+            }
+        }
+
     }
 }

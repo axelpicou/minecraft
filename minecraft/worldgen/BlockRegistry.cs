@@ -14,6 +14,19 @@ namespace minecraft.worldgen
                 { BlockType.Dirt,  new BlockDefinition(2) },
                 { BlockType.Stone, new BlockDefinition(1) },
                 { BlockType.Sand,  new BlockDefinition(19) },
+                { BlockType.Leaves, new BlockDefinition(132) },
+
+                //log
+                { BlockType.Log,
+                    new BlockDefinition(
+                        front: 20,
+                        back: 20,
+                        left: 20,
+                        right: 20,
+                        top: 21,
+                        bottom: 21
+                    )
+                },
 
                 // Grass : top ≠ sides ≠ bottom
                 {

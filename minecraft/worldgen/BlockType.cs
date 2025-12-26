@@ -12,6 +12,8 @@ namespace minecraft.worldgen
         Dirt = 1,
         Grass = 2,
         Stone = 3,
-        Sand = 4
+        Sand = 4,
+        Leaves = 5,
+        Log = 6
     }
 }

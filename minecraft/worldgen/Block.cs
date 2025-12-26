@@ -42,11 +42,16 @@ namespace minecraft.worldgen
             Vbo.Bind();
             Ebo.Bind();
 
-            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 5 * sizeof(float), 0);
+            // ✅ Layout: Position(3) + TexCoord(2) + Color(3) = 8 floats par vertex
+            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 0);
             GL.EnableVertexAttribArray(0);
 
-            GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 5 * sizeof(float), 3 * sizeof(float));
+            GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 8 * sizeof(float), 3 * sizeof(float));
             GL.EnableVertexAttribArray(1);
+
+            // ✅ Attribut de couleur
+            GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 5 * sizeof(float));
+            GL.EnableVertexAttribArray(2);
 
             Vao.Unbind();
         }
@@ -63,7 +68,7 @@ namespace minecraft.worldgen
 
             float[] vertices = (float[])baseVertices.Clone();
 
-            for (int i = 0; i < vertices.Length; i += 5)
+            for (int i = 0; i < vertices.Length; i += 8)
             {
                 float u = baseVertices[i + 3];
                 float v = baseVertices[i + 4];
@@ -94,10 +99,9 @@ namespace minecraft.worldgen
             Vao.Unbind();
         }
 
-        // ✅ CORRECTION : Les blocs occupent maintenant l'espace de (X,Y,Z) à (X+1,Y+1,Z+1)
-        public float[] GetFaceVertices(BlockFace face, Vector3 pos, float uMin, float vMin, float uMax, float vMax)
+        // ✅ Méthode avec couleur de biome
+        public float[] GetFaceVerticesWithColor(BlockFace face, Vector3 pos, float uMin, float vMin, float uMax, float vMax, Vector3 color)
         {
-            // pos représente le coin inférieur gauche arrière du bloc
             float x0 = pos.X;
             float y0 = pos.Y;
             float z0 = pos.Z;
@@ -105,59 +109,69 @@ namespace minecraft.worldgen
             float y1 = pos.Y + 1f;
             float z1 = pos.Z + 1f;
 
+            float r = color.X;
+            float g = color.Y;
+            float b = color.Z;
+
             switch (face)
             {
                 case BlockFace.Front: // Z+
                     return new float[]
                     {
-                        x0, y0, z1, uMin, vMin,
-                        x1, y0, z1, uMax, vMin,
-                        x1, y1, z1, uMax, vMax,
-                        x0, y1, z1, uMin, vMax
+                        x0, y0, z1, uMin, vMin, r, g, b,
+                        x1, y0, z1, uMax, vMin, r, g, b,
+                        x1, y1, z1, uMax, vMax, r, g, b,
+                        x0, y1, z1, uMin, vMax, r, g, b
                     };
                 case BlockFace.Back: // Z-
                     return new float[]
                     {
-                        x1, y0, z0, uMin, vMin,
-                        x0, y0, z0, uMax, vMin,
-                        x0, y1, z0, uMax, vMax,
-                        x1, y1, z0, uMin, vMax
+                        x1, y0, z0, uMin, vMin, r, g, b,
+                        x0, y0, z0, uMax, vMin, r, g, b,
+                        x0, y1, z0, uMax, vMax, r, g, b,
+                        x1, y1, z0, uMin, vMax, r, g, b
                     };
                 case BlockFace.Left: // X-
                     return new float[]
                     {
-                        x0, y0, z0, uMin, vMin,
-                        x0, y0, z1, uMax, vMin,
-                        x0, y1, z1, uMax, vMax,
-                        x0, y1, z0, uMin, vMax
+                        x0, y0, z0, uMin, vMin, r, g, b,
+                        x0, y0, z1, uMax, vMin, r, g, b,
+                        x0, y1, z1, uMax, vMax, r, g, b,
+                        x0, y1, z0, uMin, vMax, r, g, b
                     };
                 case BlockFace.Right: // X+
                     return new float[]
                     {
-                        x1, y0, z1, uMin, vMin,
-                        x1, y0, z0, uMax, vMin,
-                        x1, y1, z0, uMax, vMax,
-                        x1, y1, z1, uMin, vMax
+                        x1, y0, z1, uMin, vMin, r, g, b,
+                        x1, y0, z0, uMax, vMin, r, g, b,
+                        x1, y1, z0, uMax, vMax, r, g, b,
+                        x1, y1, z1, uMin, vMax, r, g, b
                     };
                 case BlockFace.Top: // Y+
                     return new float[]
                     {
-                        x0, y1, z1, uMin, vMin,
-                        x1, y1, z1, uMax, vMin,
-                        x1, y1, z0, uMax, vMax,
-                        x0, y1, z0, uMin, vMax
+                        x0, y1, z1, uMin, vMin, r, g, b,
+                        x1, y1, z1, uMax, vMin, r, g, b,
+                        x1, y1, z0, uMax, vMax, r, g, b,
+                        x0, y1, z0, uMin, vMax, r, g, b
                     };
                 case BlockFace.Bottom: // Y-
                     return new float[]
                     {
-                        x0, y0, z0, uMin, vMin,
-                        x1, y0, z0, uMax, vMin,
-                        x1, y0, z1, uMax, vMax,
-                        x0, y0, z1, uMin, vMax
+                        x0, y0, z0, uMin, vMin, r, g, b,
+                        x1, y0, z0, uMax, vMin, r, g, b,
+                        x1, y0, z1, uMax, vMax, r, g, b,
+                        x0, y0, z1, uMin, vMax, r, g, b
                     };
                 default:
                     return new float[0];
             }
+        }
+
+        // Ancienne méthode sans couleur (pour compatibilité)
+        public float[] GetFaceVertices(BlockFace face, Vector3 pos, float uMin, float vMin, float uMax, float vMax)
+        {
+            return GetFaceVerticesWithColor(face, pos, uMin, vMin, uMax, vMax, Vector3.One);
         }
 
         public void Delete()
