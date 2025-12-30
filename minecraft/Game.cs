@@ -16,6 +16,8 @@ namespace minecraft
         private Camera camera;
         private Block cubeBlock;
         private BlockSelector selector;
+        private bool cameraPlaced = false;
+
 
         private int shaderProgram;
 
@@ -110,13 +112,8 @@ namespace minecraft
             if (mountainBiome != null)
                 mountainBiome.BaseHeight = 12;
 
-            // Générer chunks autour du spawn pour avoir le sol
-            world.Update(new Vector3(0f, 0f, 0f));
+            camera = new Camera(new Vector3(0f, 80f, 0f)); // position temporaire haute
 
-            int surfaceY = world.GetHeightAt(0f, 0f);
-
-            // Camera au-dessus du bloc
-            camera = new Camera(new Vector3(0f, surfaceY + 1f, 0f));
             CursorState = CursorState.Grabbed;
 
             selector = new BlockSelector(world, camera, shaderProgram);
@@ -136,6 +133,15 @@ namespace minecraft
             interactor.Update(KeyboardState, MouseState);
 
             world.Update(camera.Position);
+
+            // Placement différé de la caméra une fois le chunk prêt
+            if (!cameraPlaced && world.HasChunkAt(0, 0))
+            {
+                int surfaceY = world.GetHeightAt(0f, 0f);
+                camera.SetPosition(new Vector3(0f, surfaceY + 2f, 0f));
+                cameraPlaced = true;
+            }
+
         }
 
         protected override void OnRenderFrame(FrameEventArgs args)

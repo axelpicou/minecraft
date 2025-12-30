@@ -15,7 +15,7 @@ namespace minecraft.Gameplay
         public float Yaw { get; private set; } = -90f; // regarde vers -Z
         public float Pitch { get; private set; } = 0f;
 
-        public float MovementSpeed { get; set; } = 2.5f;
+        public float MovementSpeed { get; set; } = 20f;
         public float MouseSensitivity { get; set; } = 0.1f;
 
         private Vector2 lastMousePos;

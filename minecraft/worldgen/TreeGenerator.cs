@@ -64,7 +64,7 @@ namespace minecraft.worldgen
                     pos.Y + height,
                     pos.Z + 1,
                     3,
-                    biome.LeavesColor,
+                    biome.LeavesColor,rng,
                     globalPending);
             }
             else
@@ -79,7 +79,7 @@ namespace minecraft.worldgen
                     pos.Y + height,
                     pos.Z,
                     2,
-                    biome.LeavesColor,
+                    biome.LeavesColor,rng,
                     globalPending);
             }
         }
@@ -96,7 +96,7 @@ namespace minecraft.worldgen
 
                 int r = Math.Max(0, (height - y) / 3);
                 if (r > 0)
-                    GenerateLeaves(chunk, chunkPos, pos.X, pos.Y + y, pos.Z, r, biome.LeavesColor, globalPending);
+                    GenerateLeaves(chunk, chunkPos, pos.X, pos.Y + y, pos.Z, r, biome.LeavesColor,rng, globalPending);
             }
         }
 
@@ -114,7 +114,7 @@ namespace minecraft.worldgen
                 pos.Y + height,
                 pos.Z,
                 2,
-                biome.LeavesColor,
+                biome.LeavesColor,rng,
                 globalPending);
         }
 
@@ -123,8 +123,12 @@ namespace minecraft.worldgen
         // =============================
 
         private static void GenerateLeaves(
-            Chunk chunk, Vector2i chunkPos, int cx, int cy, int cz, int radius, Vector3 color,
+            Chunk chunk, Vector2i chunkPos,
+            int cx, int cy, int cz,
+            int radius, Vector3 color,
+            Random rng,
             Dictionary<Vector2i, List<PendingBlock>> globalPending)
+
         {
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dy = -radius; dy <= radius; dy++)
@@ -132,6 +136,8 @@ namespace minecraft.worldgen
                     {
                         int dist = Math.Abs(dx) + Math.Abs(dy) + Math.Abs(dz);
                         if (dist > radius + 1) continue;
+                        if (rng.NextDouble() < 0.25) continue; // réduction feuilles
+
 
                         PlaceBlock(chunk, chunkPos,
                             cx + dx,
@@ -173,13 +179,6 @@ namespace minecraft.worldgen
                     (int)Math.Floor((float)wx / Chunk.SIZE),
                     (int)Math.Floor((float)wz / Chunk.SIZE)
                 );
-
-                // Debug : afficher quand on ajoute un pending block
-                if (type == BlockType.Leaves)
-                {
-                    Console.WriteLine($"    PendingBlock: World({wx},{wy},{wz}) -> Chunk{targetChunk} (from {chunkPos})");
-                }
-
                 // Ajouter aux pending blocks de ce chunk cible
                 if (!globalPending.ContainsKey(targetChunk))
                     globalPending[targetChunk] = new List<PendingBlock>();

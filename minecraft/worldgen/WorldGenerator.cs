@@ -8,6 +8,8 @@ namespace minecraft.worldgen
     public class WorldGenerator
     {
         private Dictionary<BiomeType, BiomeData> biomes;
+        private CaveGenerator caveGenerator;
+
         private int seed;
 
         private float biomeScale = 0.008f;
@@ -17,10 +19,15 @@ namespace minecraft.worldgen
 
         // AJOUT : Stocker les PendingBlocks par chunk
         private Dictionary<Vector2i, List<PendingBlock>> globalPendingBlocks = new();
+        // Cache biome par chunk (temporaire à la génération)
+        private Dictionary<Vector2i, BlendedBiome[,]> biomeCache = new();
+
 
         public WorldGenerator(int seed = 0)
         {
             this.seed = seed;
+            caveGenerator = new CaveGenerator(seed);
+
             InitializeBiomes();
         }
 
@@ -37,7 +44,21 @@ namespace minecraft.worldgen
 
         public void GenerateChunkTerrain(Chunk chunk, Vector2i chunkPos)
         {
-            // 1. Générer le terrain
+            biomeCache.Remove(chunkPos);
+            // ===== CACHE BIOME PAR COLONNE =====
+            BlendedBiome[,] localBiomes = new BlendedBiome[Chunk.SIZE, Chunk.SIZE];
+
+            for (int x = 0; x < Chunk.SIZE; x++)
+                for (int z = 0; z < Chunk.SIZE; z++)
+                {
+                    int worldX = chunkPos.X * Chunk.SIZE + x;
+                    int worldZ = chunkPos.Y * Chunk.SIZE + z;
+                    localBiomes[x, z] = GetBlendedBiomeAt(worldX, worldZ);
+                }
+
+            biomeCache[chunkPos] = localBiomes;
+
+            // ===== TERRAIN =====
             for (int x = 0; x < Chunk.SIZE; x++)
             {
                 for (int z = 0; z < Chunk.SIZE; z++)
@@ -45,25 +66,24 @@ namespace minecraft.worldgen
                     int worldX = chunkPos.X * Chunk.SIZE + x;
                     int worldZ = chunkPos.Y * Chunk.SIZE + z;
 
-                    var blendedBiome = GetBlendedBiomeAt(worldX, worldZ);
+                    var blendedBiome = localBiomes[x, z];
                     int height = GenerateBlendedHeight(worldX, worldZ, blendedBiome);
                     height = Math.Clamp(height, 0, Chunk.Height - 1);
 
                     Vector3 grassColor = GetBlendedGrassColor(blendedBiome);
 
-                    GenerateColumn(chunk, x, z, height, blendedBiome.dominant, grassColor);
+                    GenerateColumn(chunk, chunkPos, x, z, height, blendedBiome.dominant, grassColor);
                 }
             }
 
-            // 2. Appliquer les PendingBlocks des chunks voisins AVANT de générer les arbres
-            int appliedBlocks = ApplyPendingBlocksToChunk(chunk, chunkPos);
+            // ===== APPLIQUER PENDING AVANT ARBRES =====
+            ApplyPendingBlocksToChunk(chunk, chunkPos);
+            caveGenerator.GenerateCaves(chunk, chunkPos);
 
-            // 3. Générer les arbres de ce chunk
-            int treesBefore = globalPendingBlocks.Count;
+            // ===== ARBRES =====
             GenerateTrees(chunk, chunkPos);
-            int treesAfter = globalPendingBlocks.Count;
-
         }
+
 
         private void GenerateTrees(Chunk chunk, Vector2i chunkPos)
         {
@@ -80,7 +100,10 @@ namespace minecraft.worldgen
                     if (randomValue > 0.005f)
                         continue;
 
-                    BiomeData biome = GetBiomeAtPoint(wx, wz);
+                    BiomeData biome = biomeCache[chunkPos]
+                        [wx - chunkPos.X * Chunk.SIZE, wz - chunkPos.Y * Chunk.SIZE]
+                        .dominant;
+
                     if (biome == null || biome.TreeDensity <= 0f)
                         continue;
 
@@ -108,7 +131,7 @@ namespace minecraft.worldgen
         }
 
         // Applique les pending blocks destinés à ce chunk
-        private int ApplyPendingBlocksToChunk(Chunk chunk, Vector2i chunkPos)
+        public int ApplyPendingBlocksToChunk(Chunk chunk, Vector2i chunkPos)
         {
             if (!globalPendingBlocks.ContainsKey(chunkPos))
                 return 0;
@@ -259,19 +282,24 @@ namespace minecraft.worldgen
             return noise / 1.75f;
         }
 
-        private void GenerateColumn(Chunk chunk, int x, int z, int height, BiomeData biome, Vector3 grassColor)
+        private void GenerateColumn(Chunk chunk, Vector2i chunkPos, int x, int z, int height, BiomeData biome, Vector3 grassColor)
         {
             for (int y = 0; y < Chunk.Height; y++)
             {
                 BlockType blockType;
-                if (y > height) blockType = BlockType.Air;
-                else if (y == height) blockType = biome.SurfaceBlock;
-                else if (y >= height - biome.SubsurfaceDepth) blockType = biome.SubsurfaceBlock;
-                else blockType = biome.StoneBlock;
+                if (y > height)
+                    blockType = BlockType.Air;
+                else if (y == height)
+                    blockType = biome.SurfaceBlock;
+                else if (y >= height - biome.SubsurfaceDepth)
+                    blockType = biome.SubsurfaceBlock;
+                else
+                    blockType = biome.StoneBlock;
 
                 chunk.SetBlock(x, y, z, blockType, blockType == BlockType.Grass ? grassColor : Vector3.One);
             }
         }
+
 
         private Vector3 GetBlendedGrassColor(BlendedBiome blendedBiome)
         {
@@ -349,59 +377,10 @@ namespace minecraft.worldgen
 
         public BiomeData GetBiome(BiomeType type) => biomes.TryGetValue(type, out var b) ? b : null;
 
-        // NOUVELLE MÉTHODE : Applique tous les PendingBlocks restants aux chunks déjà générés
-        public int ApplyAllPendingBlocks(Dictionary<Vector2i, Chunk> loadedChunks, Block blockTemplate)
+        public void RemoveChunkCache(Vector2i chunkPos)
         {
-            int totalApplied = 0;
-            List<Vector2i> chunksToRebuild = new();
-
-            foreach (var kvp in globalPendingBlocks.ToList())
-            {
-                Vector2i chunkPos = kvp.Key;
-
-                // Si ce chunk existe déjà
-                if (loadedChunks.ContainsKey(chunkPos))
-                {
-                    Chunk chunk = loadedChunks[chunkPos];
-                    int baseX = chunkPos.X * Chunk.SIZE;
-                    int baseZ = chunkPos.Y * Chunk.SIZE;
-                    int applied = 0;
-
-                    foreach (PendingBlock pb in kvp.Value)
-                    {
-                        int lx = pb.WorldX - baseX;
-                        int lz = pb.WorldZ - baseZ;
-
-                        if (lx >= 0 && lx < Chunk.SIZE &&
-                            lz >= 0 && lz < Chunk.SIZE &&
-                            pb.WorldY >= 0 && pb.WorldY < Chunk.Height)
-                        {
-                            if (chunk.GetBlock(lx, pb.WorldY, lz).Type == BlockType.Air)
-                            {
-                                chunk.SetBlock(lx, pb.WorldY, lz, pb.Type, pb.Color);
-                                applied++;
-                            }
-                        }
-                    }
-
-                    if (applied > 0)
-                    {
-                        chunksToRebuild.Add(chunkPos);
-                        totalApplied += applied;
-                    }
-
-                    // Nettoyer les pending blocks appliqués
-                    globalPendingBlocks.Remove(chunkPos);
-                }
-            }
-
-            // Regénérer les mesh des chunks modifiés
-            foreach (var chunkPos in chunksToRebuild)
-            {
-                loadedChunks[chunkPos].BuildMesh(blockTemplate, chunkPos);
-            }
-
-            return totalApplied;
+            biomeCache.Remove(chunkPos);
         }
+
     }
 }

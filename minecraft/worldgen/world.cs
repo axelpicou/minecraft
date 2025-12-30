@@ -12,6 +12,10 @@ namespace minecraft.worldgen
         private const int VIEW_RADIUS = 5;
         private Block blockTemplate;
         private WorldGenerator generator;
+        // Génération progressive
+        private Queue<Vector2i> chunkGenerationQueue = new();
+        private const int MAX_CHUNKS_PER_FRAME = 1;
+
 
         public World(Block blockTemplate, int seed = 12345)
         {
@@ -41,21 +45,22 @@ namespace minecraft.worldgen
 
                     if (!activeChunks.ContainsKey(chunkCoord))
                     {
-                        Chunk chunk = new Chunk();
-                        generator.GenerateChunkTerrain(chunk, chunkCoord);
-                        activeChunks.Add(chunkCoord, chunk);
-                        newChunks.Add(chunkCoord);
+                        if (!chunkGenerationQueue.Contains(chunkCoord))
+                            chunkGenerationQueue.Enqueue(chunkCoord);
                     }
+
                 }
             }
 
             // ÉTAPE 2 : Appliquer les PendingBlocks restants aux chunks déjà générés
             if (newChunks.Count > 0)
             {
-                int totalApplied = generator.ApplyAllPendingBlocks(activeChunks, blockTemplate);
-                if (totalApplied > 0)
+                // Appliquer uniquement aux nouveaux chunks
+                foreach (var chunkPos in newChunks)
                 {
-                    Console.WriteLine($"Applied {totalApplied} late pending blocks after chunk generation");
+                    int applied = generator.ApplyPendingBlocksToChunk(activeChunks[chunkPos], chunkPos);
+                    if (applied > 0)
+                        activeChunks[chunkPos].BuildMesh(blockTemplate, chunkPos);
                 }
             }
 
@@ -70,8 +75,36 @@ namespace minecraft.worldgen
             foreach (var c in toRemove)
             {
                 activeChunks[c].Mesh.Delete();
+                generator.RemoveChunkCache(c);
                 activeChunks.Remove(c);
             }
+
+            int generated = 0;
+
+            while (chunkGenerationQueue.Count > 0 && generated < MAX_CHUNKS_PER_FRAME)
+            {
+                Vector2i pos = chunkGenerationQueue.Dequeue();
+
+                if (activeChunks.ContainsKey(pos))
+                    continue;
+
+                Chunk chunk = new Chunk();
+
+                // Génération terrain + arbres (data only)
+                generator.GenerateChunkTerrain(chunk, pos);
+
+                activeChunks.Add(pos, chunk);
+
+                // Appliquer pending blocks ciblés
+                generator.ApplyPendingBlocksToChunk(chunk, pos);
+
+                // Build mesh (gros coût → limité à 1 chunk / frame)
+                chunk.BuildMesh(blockTemplate, pos);
+
+                generated++;
+            }
+
+
         }
 
         public IEnumerable<(Chunk chunk, Vector3 position)> GetActiveChunks()
@@ -136,5 +169,16 @@ namespace minecraft.worldgen
             chunk.SetBlock(x, y, z, type);
             chunk.BuildMesh(blockTemplate, chunkCoord);
         }
+
+        public bool HasChunkAt(int worldX, int worldZ)
+        {
+            Vector2i chunkPos = new Vector2i(
+                (int)MathF.Floor(worldX / (float)Chunk.SIZE),
+                (int)MathF.Floor(worldZ / (float)Chunk.SIZE)
+            );
+
+            return activeChunks.ContainsKey(chunkPos);
+        }
+
     }
 }
