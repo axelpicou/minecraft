@@ -84,13 +84,8 @@ namespace minecraft
             base.OnLoad();
 
             GL.Viewport(0, 0, Size.X, Size.Y);
-
             GL.ClearColor(0.2f, 0.3f, 0.3f, 1f);
             GL.Enable(EnableCap.DepthTest);
-
-            // Camera
-            camera = new Camera(new Vector3(0f, 10f, 0f));
-            CursorState = CursorState.Grabbed;
 
             // Shader
             shaderProgram = GL.CreateProgram();
@@ -105,23 +100,31 @@ namespace minecraft
             // Texture atlas
             TextureAtlas atlas = new TextureAtlas("../../../Texture/atlas.png", 16);
             BlockRegistry.Init();
-
             cubeBlock = new Block(vertices, indices, atlas.TextureID);
 
-            // World et gameplay
+            // World
             world = new World(cubeBlock, seed: 12345);
 
-            world.GetGenerator().SetBiomeScale(0.015f);
-            world.GetGenerator().GetBiome(BiomeType.Mountains).BaseHeight = 12;
+            // Modifications biome Mountains
+            var mountainBiome = world.GetGenerator().GetBiome(BiomeType.Mountains);
+            if (mountainBiome != null)
+                mountainBiome.BaseHeight = 12;
 
+            // Générer chunks autour du spawn pour avoir le sol
+            world.Update(new Vector3(0f, 0f, 0f));
+
+            int surfaceY = world.GetHeightAt(0f, 0f);
+
+            // Camera au-dessus du bloc
+            camera = new Camera(new Vector3(0f, surfaceY + 1f, 0f));
+            CursorState = CursorState.Grabbed;
 
             selector = new BlockSelector(world, camera, shaderProgram);
-
             interactor = new BlockInteractor(world, camera, selector);
-
             crosshair = new CrosshairRenderer();
             crosshair.Init();
         }
+
 
         protected override void OnUpdateFrame(FrameEventArgs args)
         {

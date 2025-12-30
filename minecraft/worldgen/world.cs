@@ -2,6 +2,7 @@
 using OpenTK.Mathematics;
 using minecraft.Graphics;
 using System.Linq;
+using System;
 
 namespace minecraft.worldgen
 {
@@ -18,7 +19,6 @@ namespace minecraft.worldgen
             this.generator = new WorldGenerator(seed);
         }
 
-        // Permet de modifier les paramètres de génération
         public WorldGenerator GetGenerator() => generator;
 
         public void Update(Vector3 cameraPosition)
@@ -29,7 +29,9 @@ namespace minecraft.worldgen
             );
 
             HashSet<Vector2i> neededChunks = new();
+            List<Vector2i> newChunks = new(); // Garder trace des nouveaux chunks
 
+            // ÉTAPE 1 : Générer le terrain et les arbres pour tous les chunks
             for (int dx = -VIEW_RADIUS; dx <= VIEW_RADIUS; dx++)
             {
                 for (int dz = -VIEW_RADIUS; dz <= VIEW_RADIUS; dz++)
@@ -40,16 +42,30 @@ namespace minecraft.worldgen
                     if (!activeChunks.ContainsKey(chunkCoord))
                     {
                         Chunk chunk = new Chunk();
-
-                        // ✅ Utiliser le nouveau WorldGenerator
                         generator.GenerateChunkTerrain(chunk, chunkCoord);
-
-                        chunk.BuildMesh(blockTemplate, chunkCoord);
                         activeChunks.Add(chunkCoord, chunk);
+                        newChunks.Add(chunkCoord);
                     }
                 }
             }
 
+            // ÉTAPE 2 : Appliquer les PendingBlocks restants aux chunks déjà générés
+            if (newChunks.Count > 0)
+            {
+                int totalApplied = generator.ApplyAllPendingBlocks(activeChunks, blockTemplate);
+                if (totalApplied > 0)
+                {
+                    Console.WriteLine($"Applied {totalApplied} late pending blocks after chunk generation");
+                }
+            }
+
+            // ÉTAPE 3 : Construire les mesh pour les nouveaux chunks
+            foreach (var chunkCoord in newChunks)
+            {
+                activeChunks[chunkCoord].BuildMesh(blockTemplate, chunkCoord);
+            }
+
+            // Nettoyer les chunks trop éloignés
             var toRemove = activeChunks.Keys.Where(c => !neededChunks.Contains(c)).ToList();
             foreach (var c in toRemove)
             {
@@ -99,6 +115,7 @@ namespace minecraft.worldgen
 
             if (activeChunks.TryGetValue(chunkCoord, out Chunk chunk))
                 return chunk;
+
             return null;
         }
 

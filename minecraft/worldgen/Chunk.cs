@@ -3,32 +3,14 @@ using System.Collections.Generic;
 
 namespace minecraft.worldgen
 {
-    public struct PendingBlock
-    {
-        public int WorldX;
-        public int WorldY;
-        public int WorldZ;
-        public BlockType Type;
-
-        public PendingBlock(int x, int y, int z, BlockType type)
-        {
-            WorldX = x;
-            WorldY = y;
-            WorldZ = z;
-            Type = type;
-        }
-    }
-
-
-
-
     public class Chunk
     {
         public const int SIZE = 16;
         public const int Height = 256;
         public const int ATLAS_TILES = 16;
-        public List<PendingBlock> PendingBlocks = new();
 
+        // AJOUT : Liste des blocs en attente pour les arbres qui débordent
+        public List<PendingBlock> PendingBlocks = new();
 
         private BlockData[,,] blocks = new BlockData[SIZE, Height, SIZE];
         public ChunkMesh Mesh { get; private set; } = new ChunkMesh();
@@ -85,12 +67,16 @@ namespace minecraft.worldgen
                         Vector3 grassTopColor =
                             (b.Type == BlockType.Grass) ? b.BiomeColor : Vector3.One;
 
+                        // Couleur pour les feuilles
+                        Vector3 leavesColor =
+                            (b.Type == BlockType.Leaves) ? b.BiomeColor : Vector3.One;
+
                         // FRONT
                         AddFace(vertices, indices, ref offset, blockTemplate, pos,
                             BlockFace.Front,
                             IsAir(x, y, z + 1),
                             def.GetTexture(BlockFace.Front),
-                            white
+                            b.Type == BlockType.Leaves ? leavesColor : white
                         );
 
                         // BACK
@@ -98,7 +84,7 @@ namespace minecraft.worldgen
                             BlockFace.Back,
                             IsAir(x, y, z - 1),
                             def.GetTexture(BlockFace.Back),
-                            white
+                            b.Type == BlockType.Leaves ? leavesColor : white
                         );
 
                         // LEFT
@@ -106,7 +92,7 @@ namespace minecraft.worldgen
                             BlockFace.Left,
                             IsAir(x - 1, y, z),
                             def.GetTexture(BlockFace.Left),
-                            white
+                            b.Type == BlockType.Leaves ? leavesColor : white
                         );
 
                         // RIGHT
@@ -114,7 +100,7 @@ namespace minecraft.worldgen
                             BlockFace.Right,
                             IsAir(x + 1, y, z),
                             def.GetTexture(BlockFace.Right),
-                            white
+                            b.Type == BlockType.Leaves ? leavesColor : white
                         );
 
                         // TOP 🌱 (HERBE TEINTÉE)
@@ -122,7 +108,7 @@ namespace minecraft.worldgen
                             BlockFace.Top,
                             IsAir(x, y + 1, z),
                             def.GetTexture(BlockFace.Top),
-                            grassTopColor
+                            b.Type == BlockType.Grass ? grassTopColor : (b.Type == BlockType.Leaves ? leavesColor : white)
                         );
 
                         // BOTTOM
@@ -130,7 +116,7 @@ namespace minecraft.worldgen
                             BlockFace.Bottom,
                             IsAir(x, y - 1, z),
                             def.GetTexture(BlockFace.Bottom),
-                            white
+                            b.Type == BlockType.Leaves ? leavesColor : white
                         );
                     }
 
@@ -199,6 +185,9 @@ namespace minecraft.worldgen
                    z >= 0 && z < SIZE;
         }
 
+        // =============================
+        // PENDING BLOCKS
+        // =============================
         public void ApplyPendingBlocks(Vector2i chunkPos)
         {
             int baseX = chunkPos.X * SIZE;
@@ -215,11 +204,11 @@ namespace minecraft.worldgen
                     lz >= 0 && lz < SIZE &&
                     pb.WorldY >= 0 && pb.WorldY < Height)
                 {
-                    SetBlock(lx, pb.WorldY, lz, pb.Type);
+                    // Appliquer avec la couleur stockée
+                    SetBlock(lx, pb.WorldY, lz, pb.Type, pb.Color);
                     PendingBlocks.RemoveAt(i);
                 }
             }
         }
-
     }
 }
