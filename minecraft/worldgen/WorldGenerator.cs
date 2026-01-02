@@ -76,12 +76,12 @@ namespace minecraft.worldgen
                 }
             }
 
-            // ===== APPLIQUER PENDING AVANT ARBRES =====
-            ApplyPendingBlocksToChunk(chunk, chunkPos);
             caveGenerator.GenerateCaves(chunk, chunkPos);
 
-            // ===== ARBRES =====
             GenerateTrees(chunk, chunkPos);
+
+            ApplySkyLight(chunk);
+
         }
 
 
@@ -131,18 +131,16 @@ namespace minecraft.worldgen
         }
 
         // Applique les pending blocks destinés à ce chunk
-        public int ApplyPendingBlocksToChunk(Chunk chunk, Vector2i chunkPos)
+        public bool ApplyPendingBlocksToChunk(Chunk chunk, Vector2i chunkPos)
         {
-            if (!globalPendingBlocks.ContainsKey(chunkPos))
-                return 0;
+            if (!globalPendingBlocks.TryGetValue(chunkPos, out var blocks))
+                return false;
 
-            List<PendingBlock> blocks = globalPendingBlocks[chunkPos];
             int baseX = chunkPos.X * Chunk.SIZE;
             int baseZ = chunkPos.Y * Chunk.SIZE;
-            int applied = 0;
+            bool applied = false;
 
-
-            foreach (PendingBlock pb in blocks)
+            foreach (var pb in blocks)
             {
                 int lx = pb.WorldX - baseX;
                 int lz = pb.WorldZ - baseZ;
@@ -151,18 +149,15 @@ namespace minecraft.worldgen
                     lz >= 0 && lz < Chunk.SIZE &&
                     pb.WorldY >= 0 && pb.WorldY < Chunk.Height)
                 {
-                    if (chunk.GetBlock(lx, pb.WorldY, lz).Type == BlockType.Air)
-                    {
-                        chunk.SetBlock(lx, pb.WorldY, lz, pb.Type, pb.Color);
-                        applied++;
-                    }
+                    chunk.SetBlock(lx, pb.WorldY, lz, pb.Type, pb.Color);
+                    applied = true;
                 }
             }
 
-            // Nettoyer les pending blocks appliqués
             globalPendingBlocks.Remove(chunkPos);
             return applied;
         }
+
 
         // Trouve la vraie surface du terrain
         private int FindActualSurfaceY(Chunk chunk, Vector2i chunkPos, int worldX, int worldZ)
@@ -381,6 +376,34 @@ namespace minecraft.worldgen
         {
             biomeCache.Remove(chunkPos);
         }
+
+        private void ApplySkyLight(Chunk chunk)
+        {
+            for (int x = 0; x < Chunk.SIZE; x++)
+                for (int z = 0; z < Chunk.SIZE; z++)
+                {
+                    byte light = 15;
+
+                    for (int y = Chunk.Height - 1; y >= 0; y--)
+                    {
+                        BlockData b = chunk.GetBlock(x, y, z);
+
+                        if (b.Type == BlockType.Air)
+                        {
+                            b.Light = light;
+                            chunk.SetBlock(x, y, z, BlockType.Air, b.BiomeColor, light);
+                        }
+                        else
+                        {
+                            b.Light = light;
+                            chunk.SetBlock(x, y, z, b.Type, b.BiomeColor, light);
+                            break;
+                        }
+                    }
+                }
+        }
+
+
 
     }
 }

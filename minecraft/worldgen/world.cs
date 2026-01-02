@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using OpenTK.Mathematics;
-using minecraft.Graphics;
 using System.Linq;
 using System;
 
@@ -9,114 +8,197 @@ namespace minecraft.worldgen
     public class World
     {
         private Dictionary<Vector2i, Chunk> activeChunks = new();
+        private Queue<Vector2i> chunkGenerationQueue = new();
+        private Queue<Vector2i> meshRebuildQueue = new();
+
         private const int VIEW_RADIUS = 5;
+        private const int MAX_CHUNKS_PER_FRAME = 1;
+        private const int MAX_MESH_REBUILDS_PER_FRAME = 1;
+
         private Block blockTemplate;
         private WorldGenerator generator;
-        // Génération progressive
-        private Queue<Vector2i> chunkGenerationQueue = new();
-        private const int MAX_CHUNKS_PER_FRAME = 1;
-
 
         public World(Block blockTemplate, int seed = 12345)
         {
             this.blockTemplate = blockTemplate;
             this.generator = new WorldGenerator(seed);
         }
+        public WorldGenerator GetGenerator()
+        {
+            return generator;
+        }
 
-        public WorldGenerator GetGenerator() => generator;
-
+        // =============================
+        // UPDATE
+        // =============================
         public void Update(Vector3 cameraPosition)
         {
-            Vector2i camChunk = new Vector2i(
+            Vector2i camChunk = new(
                 (int)MathF.Floor(cameraPosition.X / Chunk.SIZE),
                 (int)MathF.Floor(cameraPosition.Z / Chunk.SIZE)
             );
 
-            HashSet<Vector2i> neededChunks = new();
-            List<Vector2i> newChunks = new(); // Garder trace des nouveaux chunks
+            HashSet<Vector2i> needed = new();
 
-            // ÉTAPE 1 : Générer le terrain et les arbres pour tous les chunks
+            // === REQUIRED CHUNKS ===
             for (int dx = -VIEW_RADIUS; dx <= VIEW_RADIUS; dx++)
-            {
                 for (int dz = -VIEW_RADIUS; dz <= VIEW_RADIUS; dz++)
                 {
-                    Vector2i chunkCoord = new Vector2i(camChunk.X + dx, camChunk.Y + dz);
-                    neededChunks.Add(chunkCoord);
+                    Vector2i pos = new(camChunk.X + dx, camChunk.Y + dz);
+                    needed.Add(pos);
 
-                    if (!activeChunks.ContainsKey(chunkCoord))
+                    if (!activeChunks.ContainsKey(pos) &&
+                        !chunkGenerationQueue.Contains(pos))
                     {
-                        if (!chunkGenerationQueue.Contains(chunkCoord))
-                            chunkGenerationQueue.Enqueue(chunkCoord);
+                        chunkGenerationQueue.Enqueue(pos);
                     }
-
                 }
-            }
 
-            // ÉTAPE 2 : Appliquer les PendingBlocks restants aux chunks déjà générés
-            if (newChunks.Count > 0)
+            // === GENERATION ===
+            int generated = 0;
+
+            while (chunkGenerationQueue.Count > 0 && generated < MAX_CHUNKS_PER_FRAME)
             {
-                // Appliquer uniquement aux nouveaux chunks
-                foreach (var chunkPos in newChunks)
-                {
-                    int applied = generator.ApplyPendingBlocksToChunk(activeChunks[chunkPos], chunkPos);
-                    if (applied > 0)
-                        activeChunks[chunkPos].BuildMesh(blockTemplate, chunkPos);
-                }
+                Vector2i pos = chunkGenerationQueue.Dequeue();
+                if (activeChunks.ContainsKey(pos)) continue;
+
+                Chunk chunk = new Chunk();
+                generator.GenerateChunkTerrain(chunk, pos);
+                generator.ApplyPendingBlocksToChunk(chunk, pos);
+
+                activeChunks.Add(pos, chunk);
+
+                MarkChunkDirty(pos);
+                MarkNeighborsDirty(pos);
+
+                generated++;
             }
 
-            // ÉTAPE 3 : Construire les mesh pour les nouveaux chunks
-            foreach (var chunkCoord in newChunks)
+            // === MESH REBUILD (LIMITED) ===
+            int rebuilt = 0;
+
+            while (meshRebuildQueue.Count > 0 && rebuilt < MAX_MESH_REBUILDS_PER_FRAME)
             {
-                activeChunks[chunkCoord].BuildMesh(blockTemplate, chunkCoord);
+                Vector2i pos = meshRebuildQueue.Dequeue();
+
+                if (!activeChunks.TryGetValue(pos, out Chunk chunk))
+                    continue;
+
+                if (!chunk.NeedsMeshRebuild)
+                    continue;
+
+                chunk.BuildMesh(this, blockTemplate, pos);
+                rebuilt++;
             }
 
-            // Nettoyer les chunks trop éloignés
-            var toRemove = activeChunks.Keys.Where(c => !neededChunks.Contains(c)).ToList();
+            // === CLEANUP ===
+            var toRemove = activeChunks.Keys
+                .Where(c => !needed.Contains(c))
+                .ToList();
+
             foreach (var c in toRemove)
             {
                 activeChunks[c].Mesh.Delete();
                 generator.RemoveChunkCache(c);
                 activeChunks.Remove(c);
             }
-
-            int generated = 0;
-
-            while (chunkGenerationQueue.Count > 0 && generated < MAX_CHUNKS_PER_FRAME)
-            {
-                Vector2i pos = chunkGenerationQueue.Dequeue();
-
-                if (activeChunks.ContainsKey(pos))
-                    continue;
-
-                Chunk chunk = new Chunk();
-
-                // Génération terrain + arbres (data only)
-                generator.GenerateChunkTerrain(chunk, pos);
-
-                activeChunks.Add(pos, chunk);
-
-                // Appliquer pending blocks ciblés
-                generator.ApplyPendingBlocksToChunk(chunk, pos);
-
-                // Build mesh (gros coût → limité à 1 chunk / frame)
-                chunk.BuildMesh(blockTemplate, pos);
-
-                generated++;
-            }
-
-
         }
 
-        public IEnumerable<(Chunk chunk, Vector3 position)> GetActiveChunks()
+        // =============================
+        // DIRTY MANAGEMENT
+        // =============================
+        private void MarkChunkDirty(Vector2i pos)
         {
-            foreach (var kvp in activeChunks)
-            {
-                Chunk chunk = kvp.Value;
-                Vector3 pos = Vector3.Zero;
-                yield return (chunk, pos);
-            }
+            if (!meshRebuildQueue.Contains(pos))
+                meshRebuildQueue.Enqueue(pos);
         }
 
+        private void MarkNeighborsDirty(Vector2i pos)
+        {
+            Vector2i[] neighbors =
+            {
+                pos + new Vector2i( 1, 0),
+                pos + new Vector2i(-1, 0),
+                pos + new Vector2i( 0, 1),
+                pos + new Vector2i( 0,-1),
+            };
+
+            foreach (var n in neighbors)
+                if (activeChunks.ContainsKey(n))
+                    MarkChunkDirty(n);
+        }
+
+        // =============================
+        // GLOBAL BLOCK ACCESS
+        // =============================
+        public BlockData GetBlockGlobal(int wx, int y, int wz)
+        {
+            Vector2i c = new(
+                (int)MathF.Floor((float)wx / Chunk.SIZE),
+                (int)MathF.Floor((float)wz / Chunk.SIZE)
+            );
+
+            if (!activeChunks.TryGetValue(c, out Chunk chunk))
+                return new BlockData(BlockType.Air);
+
+            int lx = wx - c.X * Chunk.SIZE;
+            int lz = wz - c.Y * Chunk.SIZE;
+
+            if (y < 0 || y >= Chunk.Height)
+                return new BlockData(BlockType.Air);
+
+            return chunk.GetBlock(lx, y, lz);
+        }
+
+        // =============================
+        // RENDER ACCESS
+        // =============================
+        public IEnumerable<(Chunk chunk, Vector3 pos)> GetActiveChunks()
+        {
+            foreach (var kv in activeChunks)
+                yield return (kv.Value, Vector3.Zero);
+        }
+
+        public bool HasChunkAt(int worldX, int worldZ)
+        {
+            Vector2i chunkPos = new(
+                (int)MathF.Floor(worldX / (float)Chunk.SIZE),
+                (int)MathF.Floor(worldZ / (float)Chunk.SIZE)
+            );
+
+            return activeChunks.ContainsKey(chunkPos);
+        }
+
+        public Chunk GetChunkAtWorldPos(Vector3 worldPos)
+        {
+            Vector2i chunkPos = new(
+                (int)MathF.Floor(worldPos.X / Chunk.SIZE),
+                (int)MathF.Floor(worldPos.Z / Chunk.SIZE)
+            );
+
+            activeChunks.TryGetValue(chunkPos, out Chunk chunk);
+            return chunk;
+        }
+
+
+        public void SetBlock(Vector2i chunkCoord, Vector3 localPos, BlockType type)
+        {
+            if (!activeChunks.TryGetValue(chunkCoord, out Chunk chunk))
+                return;
+
+            int x = (int)localPos.X;
+            int y = (int)localPos.Y;
+            int z = (int)localPos.Z;
+
+            if (!chunk.IsInside(x, y, z))
+                return;
+
+            chunk.SetBlock(x, y, z, type);
+
+            // 🔥 marquer ce chunk et ses voisins dirty
+            MarkChunkDirty(chunkCoord);
+            MarkNeighborsDirty(chunkCoord);
+        }
         public int GetHeightAt(float worldX, float worldZ)
         {
             Vector2i chunkCoord = new Vector2i(
@@ -139,46 +221,6 @@ namespace minecraft.worldgen
             return 0;
         }
 
-        public Chunk GetChunkAtWorldPos(Vector3 worldPos)
-        {
-            Vector2i chunkCoord = new Vector2i(
-                (int)MathF.Floor(worldPos.X / Chunk.SIZE),
-                (int)MathF.Floor(worldPos.Z / Chunk.SIZE)
-            );
-
-            if (activeChunks.TryGetValue(chunkCoord, out Chunk chunk))
-                return chunk;
-
-            return null;
-        }
-
-        public void SetBlock(Vector2i chunkCoord, Vector3 localPos, BlockType type)
-        {
-            if (!activeChunks.TryGetValue(chunkCoord, out Chunk chunk))
-                return;
-
-            int x = (int)localPos.X;
-            int y = (int)localPos.Y;
-            int z = (int)localPos.Z;
-
-            if (x < 0 || x >= Chunk.SIZE ||
-                y < 0 || y >= Chunk.Height ||
-                z < 0 || z >= Chunk.SIZE)
-                return;
-
-            chunk.SetBlock(x, y, z, type);
-            chunk.BuildMesh(blockTemplate, chunkCoord);
-        }
-
-        public bool HasChunkAt(int worldX, int worldZ)
-        {
-            Vector2i chunkPos = new Vector2i(
-                (int)MathF.Floor(worldX / (float)Chunk.SIZE),
-                (int)MathF.Floor(worldZ / (float)Chunk.SIZE)
-            );
-
-            return activeChunks.ContainsKey(chunkPos);
-        }
 
     }
 }

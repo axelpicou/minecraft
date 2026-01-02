@@ -6,6 +6,7 @@ layout(location = 2) in vec3 aColor;
 
 out vec2 TexCoord;
 out vec3 Color;
+out float SkyFactor;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -15,5 +16,7 @@ void main()
 {
     gl_Position = projection * view * model * vec4(aPosition, 1.0);
     TexCoord = aTexCoord;
-    Color = aColor; 
+    Color = aColor;
+
+    SkyFactor = clamp(aPosition.y / 256.0, 0.3, 1.0);
 }

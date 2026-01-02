@@ -37,7 +37,7 @@ namespace minecraft.worldgen
                         left: 3,
                         right: 3,
                         top: 0,
-                        bottom: 3
+                        bottom: 2
                     )
                 }
             };

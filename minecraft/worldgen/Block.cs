@@ -42,65 +42,50 @@ namespace minecraft.worldgen
             Vbo.Bind();
             Ebo.Bind();
 
-            // ✅ Layout: Position(3) + TexCoord(2) + Color(3) = 8 floats par vertex
+            // Position
             GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 0);
             GL.EnableVertexAttribArray(0);
 
+            // UV
             GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 8 * sizeof(float), 3 * sizeof(float));
             GL.EnableVertexAttribArray(1);
 
-            // ✅ Attribut de couleur
+            // Couleur (AO + biome)
             GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 5 * sizeof(float));
             GL.EnableVertexAttribArray(2);
 
             Vao.Unbind();
         }
 
-        private void UpdateUVs(int textureIndex)
+        // ============================================================
+        // 🌱 MÉTHODE EXISTANTE (COULEUR UNIFORME)
+        // ============================================================
+        public float[] GetFaceVerticesWithColor(
+            BlockFace face,
+            Vector3 pos,
+            float uMin,
+            float vMin,
+            float uMax,
+            float vMax,
+            Vector3 color)
         {
-            float tileSize = 1f / atlasTiles;
-
-            int x = textureIndex % atlasTiles;
-            int y = textureIndex / atlasTiles;
-
-            float uMin = x * tileSize;
-            float vMin = y * tileSize;
-
-            float[] vertices = (float[])baseVertices.Clone();
-
-            for (int i = 0; i < vertices.Length; i += 8)
-            {
-                float u = baseVertices[i + 3];
-                float v = baseVertices[i + 4];
-
-                vertices[i + 3] = uMin + u * tileSize;
-                vertices[i + 4] = vMin + v * tileSize;
-            }
-
-            Vbo.Bind();
-            GL.BufferSubData(BufferTarget.ArrayBuffer, 0, vertices.Length * sizeof(float), vertices);
+            return GetFaceVerticesWithColor(
+                face, pos, uMin, vMin, uMax, vMax,
+                new[] { color, color, color, color }
+            );
         }
 
-        public void DrawFace(Vector3 position, int shaderProgram, int textureIndex, BlockFace face)
-        {
-            GL.UseProgram(shaderProgram);
-            GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindTexture(TextureTarget.Texture2D, Texture);
-            GL.Uniform1(GL.GetUniformLocation(shaderProgram, "ourTexture"), 0);
-
-            UpdateUVs(textureIndex);
-
-            Matrix4 model = Matrix4.Identity;
-            GL.UniformMatrix4(GL.GetUniformLocation(shaderProgram, "model"), false, ref model);
-
-            Vao.Bind();
-            int offset = (int)face * 6;
-            GL.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, offset * sizeof(uint));
-            Vao.Unbind();
-        }
-
-        // ✅ Méthode avec couleur de biome
-        public float[] GetFaceVerticesWithColor(BlockFace face, Vector3 pos, float uMin, float vMin, float uMax, float vMax, Vector3 color)
+        // ============================================================
+        // 🔥 NOUVELLE MÉTHODE : AO PAR SOMMET (4 COULEURS)
+        // ============================================================
+        public float[] GetFaceVerticesWithColor(
+            BlockFace face,
+            Vector3 pos,
+            float uMin,
+            float vMin,
+            float uMax,
+            float vMax,
+            Vector3[] colors)
         {
             float x0 = pos.X;
             float y0 = pos.Y;
@@ -109,69 +94,70 @@ namespace minecraft.worldgen
             float y1 = pos.Y + 1f;
             float z1 = pos.Z + 1f;
 
-            float r = color.X;
-            float g = color.Y;
-            float b = color.Z;
+            Vector3 c0 = colors[0];
+            Vector3 c1 = colors[1];
+            Vector3 c2 = colors[2];
+            Vector3 c3 = colors[3];
 
             switch (face)
             {
                 case BlockFace.Front: // Z+
                     return new float[]
                     {
-                        x0, y0, z1, uMin, vMin, r, g, b,
-                        x1, y0, z1, uMax, vMin, r, g, b,
-                        x1, y1, z1, uMax, vMax, r, g, b,
-                        x0, y1, z1, uMin, vMax, r, g, b
+                        x0, y0, z1, uMin, vMin, c0.X, c0.Y, c0.Z,
+                        x1, y0, z1, uMax, vMin, c1.X, c1.Y, c1.Z,
+                        x1, y1, z1, uMax, vMax, c2.X, c2.Y, c2.Z,
+                        x0, y1, z1, uMin, vMax, c3.X, c3.Y, c3.Z
                     };
+
                 case BlockFace.Back: // Z-
                     return new float[]
                     {
-                        x1, y0, z0, uMin, vMin, r, g, b,
-                        x0, y0, z0, uMax, vMin, r, g, b,
-                        x0, y1, z0, uMax, vMax, r, g, b,
-                        x1, y1, z0, uMin, vMax, r, g, b
+                        x1, y0, z0, uMin, vMin, c0.X, c0.Y, c0.Z,
+                        x0, y0, z0, uMax, vMin, c1.X, c1.Y, c1.Z,
+                        x0, y1, z0, uMax, vMax, c2.X, c2.Y, c2.Z,
+                        x1, y1, z0, uMin, vMax, c3.X, c3.Y, c3.Z
                     };
+
                 case BlockFace.Left: // X-
                     return new float[]
                     {
-                        x0, y0, z0, uMin, vMin, r, g, b,
-                        x0, y0, z1, uMax, vMin, r, g, b,
-                        x0, y1, z1, uMax, vMax, r, g, b,
-                        x0, y1, z0, uMin, vMax, r, g, b
+                        x0, y0, z0, uMin, vMin, c0.X, c0.Y, c0.Z,
+                        x0, y0, z1, uMax, vMin, c1.X, c1.Y, c1.Z,
+                        x0, y1, z1, uMax, vMax, c2.X, c2.Y, c2.Z,
+                        x0, y1, z0, uMin, vMax, c3.X, c3.Y, c3.Z
                     };
+
                 case BlockFace.Right: // X+
                     return new float[]
                     {
-                        x1, y0, z1, uMin, vMin, r, g, b,
-                        x1, y0, z0, uMax, vMin, r, g, b,
-                        x1, y1, z0, uMax, vMax, r, g, b,
-                        x1, y1, z1, uMin, vMax, r, g, b
+                        x1, y0, z1, uMin, vMin, c0.X, c0.Y, c0.Z,
+                        x1, y0, z0, uMax, vMin, c1.X, c1.Y, c1.Z,
+                        x1, y1, z0, uMax, vMax, c2.X, c2.Y, c2.Z,
+                        x1, y1, z1, uMin, vMax, c3.X, c3.Y, c3.Z
                     };
+
                 case BlockFace.Top: // Y+
                     return new float[]
                     {
-                        x0, y1, z1, uMin, vMin, r, g, b,
-                        x1, y1, z1, uMax, vMin, r, g, b,
-                        x1, y1, z0, uMax, vMax, r, g, b,
-                        x0, y1, z0, uMin, vMax, r, g, b
+                        x0, y1, z1, uMin, vMin, c0.X, c0.Y, c0.Z,
+                        x1, y1, z1, uMax, vMin, c1.X, c1.Y, c1.Z,
+                        x1, y1, z0, uMax, vMax, c2.X, c2.Y, c2.Z,
+                        x0, y1, z0, uMin, vMax, c3.X, c3.Y, c3.Z
                     };
+
                 case BlockFace.Bottom: // Y-
                     return new float[]
                     {
-                        x0, y0, z0, uMin, vMin, r, g, b,
-                        x1, y0, z0, uMax, vMin, r, g, b,
-                        x1, y0, z1, uMax, vMax, r, g, b,
-                        x0, y0, z1, uMin, vMax, r, g, b
+                        x0, y0, z0, uMin, vMin, c0.X, c0.Y, c0.Z,
+                        x1, y0, z0, uMax, vMin, c1.X, c1.Y, c1.Z,
+                        x1, y0, z1, uMax, vMax, c2.X, c2.Y, c2.Z,
+                        x0, y0, z1, uMin, vMax, c3.X, c3.Y, c3.Z
                     };
+
                 default:
                     return new float[0];
             }
-        }
-
-        // Ancienne méthode sans couleur (pour compatibilité)
-        public float[] GetFaceVertices(BlockFace face, Vector3 pos, float uMin, float vMin, float uMax, float vMax)
-        {
-            return GetFaceVerticesWithColor(face, pos, uMin, vMin, uMax, vMax, Vector3.One);
         }
 
         public void Delete()
